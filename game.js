@@ -21,6 +21,7 @@ export function createDefaultState(now = Date.now()) {
     manualProgress: 0,
     autoProgress: 0,
     totalTyped: 0,
+    totalHacks: 0,
     totalManualMints: 0,
     sessionStartedAt: now,
     lastSavedAt: now,
@@ -74,6 +75,7 @@ export function applyOfflineProgress(state, elapsedSeconds) {
   return {
     ...state,
     hacks: state.hacks + earned,
+    totalHacks: state.totalHacks + earned,
     autoProgress: combinedProgress - earned,
     offlineSeconds: safeElapsed,
     offlineGain: earned,
@@ -89,13 +91,20 @@ export function normalizeState(candidate, now = Date.now()) {
     return Number.isFinite(parsed) && parsed >= minimum ? parsed : fallbackValue;
   };
 
+  const normalizedHacks = Math.floor(numberOr(candidate.hacks, fallback.hacks));
+  const normalizedTotalHacks = Math.max(
+    normalizedHacks,
+    Math.floor(numberOr(candidate.totalHacks, normalizedHacks)),
+  );
+
   return {
-    hacks: Math.floor(numberOr(candidate.hacks, fallback.hacks)),
+    hacks: normalizedHacks,
     amplifierLevel: Math.min(UPGRADE_CONFIG.amplifier.maxLevel, Math.floor(numberOr(candidate.amplifierLevel, 0))),
     autohackerLevel: Math.min(UPGRADE_CONFIG.autohacker.maxLevel, Math.floor(numberOr(candidate.autohackerLevel, 0))),
     manualProgress: Math.min(0.9999, numberOr(candidate.manualProgress, 0)),
     autoProgress: Math.min(0.9999, numberOr(candidate.autoProgress, 0)),
     totalTyped: Math.floor(numberOr(candidate.totalTyped, 0)),
+    totalHacks: normalizedTotalHacks,
     totalManualMints: Math.floor(numberOr(candidate.totalManualMints, 0)),
     sessionStartedAt: numberOr(candidate.sessionStartedAt, now),
     lastSavedAt: numberOr(candidate.lastSavedAt, now),

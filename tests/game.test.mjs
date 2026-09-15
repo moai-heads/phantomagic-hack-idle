@@ -14,6 +14,7 @@ import {
 test("new sessions start with empty score and two-second manual cycles", () => {
   const state = createDefaultState(123);
   assert.equal(state.hacks, 0);
+  assert.equal(state.totalHacks, 0);
   assert.equal(getManualRate(state), 0.5);
   assert.equal(getAutoRate(state), 0);
 });
@@ -36,6 +37,7 @@ test("autohacker output is passive and amplifier boosts it", () => {
   const progressed = applyOfflineProgress(state, 10);
   assert.equal(progressed.offlineGain, 2);
   assert.equal(progressed.hacks, 2);
+  assert.equal(progressed.totalHacks, 2);
   assert.ok(Math.abs(progressed.autoProgress - 0.24) < 1e-12);
 });
 
@@ -44,12 +46,14 @@ test("offline progress is capped and preserves partial charge", () => {
   const progressed = applyOfflineProgress(state, 100000);
   assert.equal(progressed.offlineSeconds, 28800);
   assert.equal(progressed.offlineGain, 2880);
+  assert.equal(progressed.totalHacks, 2880);
   assert.equal(progressed.autoProgress, 0.5);
 });
 
 test("corrupt saved values are normalized to safe ranges", () => {
   const state = normalizeState({ hacks: -4, manualProgress: 9, autohackerLevel: 999 }, 50);
   assert.equal(state.hacks, 0);
+  assert.equal(state.totalHacks, 0);
   assert.equal(state.manualProgress, 0.9999);
   assert.equal(state.autohackerLevel, 12);
   assert.equal(state.sessionStartedAt, 50);

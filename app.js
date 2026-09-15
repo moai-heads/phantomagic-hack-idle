@@ -14,15 +14,17 @@ import {
 
 const STREAM_TEMPLATES = Object.freeze([
   "ssh ghost@10.13.37.4 -p 443",
-  "const phantom = await bypass.firewall();",
+  "const phantom = await bypassFirewall();",
   "chmod +x /tmp/phantomagic",
-  "SELECT * FROM shadows WHERE port = 22;",
+  "node -e \"routePackets().then(ghost)\"",
   "decrypt --layer=07 --seed=0x7F3A",
-  "[ok] route accepted :: packet echoed",
   "nmap -sS --min-rate 9000 172.16.0.0/16",
   "for (;;) { listen(); learn(); }",
-  "proxy_chain[3] -> blackbox -> null",
-  "echo 'nothing to see here' > /var/log/ghost",
+  "const route = packets.filter(Boolean).at(-1);",
+  "export PATH=/tmp/phantom:$PATH",
+  "while read packet; do echo \"$packet\"; done",
+  "async function ghostRoute() { return await hop(); }",
+  "npm run deploy -- --stealth",
 ]);
 
 const HEX = "0123456789ABCDEF";
@@ -36,6 +38,7 @@ const MANUAL_DECAY_RATE = 0.12;
 const elements = {
   appShell: document.querySelector("#appShell"),
   hacksCount: document.querySelector("#hacksCount"),
+  totalHacksCount: document.querySelector("#totalHacksCount"),
   hacksPerSecond: document.querySelector("#hacksPerSecond"),
   sessionTimer: document.querySelector("#sessionTimer"),
   inputState: document.querySelector("#inputState"),
@@ -80,6 +83,7 @@ let state = loadState();
 let lastFrame = performance.now();
 let lastInputAt = 0;
 let noteBuffer = "";
+let noteBufferLine = "";
 let toastTimeout;
 
 function loadState() {
@@ -118,6 +122,7 @@ function resetState() {
   state = createDefaultState(Date.now());
   lastInputAt = 0;
   noteBuffer = "";
+  noteBufferLine = "";
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
@@ -149,10 +154,9 @@ function fakeLineFromInput() {
   return template.replace(/0x7F3A|0x[0-9A-F]+/i, `0x${randomHex(4)}`);
 }
 
-function updateNoteBuffer() {
-  elements.noteBuffer.textContent = noteBuffer
-    ? `signal buffered // ${noteBuffer.length} chars retained`
-    : "awaiting global input...";
+function updateNoteBuffer(line = null) {
+  if (line !== null) noteBufferLine = line;
+  elements.noteBuffer.textContent = noteBufferLine || "awaiting global input...";
   elements.noteBufferCount.textContent = `${String(noteBuffer.length).padStart(2, "0")}/${MAX_NOTE_BUFFER}`;
 }
 
@@ -220,6 +224,7 @@ function recordKey(key) {
   updateNoteBufferWithKey(key);
 
   const fakeCommand = fakeLineFromInput();
+  updateNoteBuffer(fakeCommand);
   appendTerminal("output", `${fakeCommand}  :: packet ${randomHex(4)}`);
 }
 
@@ -250,6 +255,7 @@ function handlePaste(event) {
 function earnHacks(amount, reason = "manual node") {
   if (!amount) return;
   state.hacks += amount;
+  state.totalHacks += amount;
   state.totalManualMints += reason === "manual node" ? amount : 0;
   appendTerminal("output", `${reason} :: +${amount} hack${amount === 1 ? "" : "s"} minted`);
   addEvent(`${reason} minted +${amount} hack${amount === 1 ? "" : "s"}`);
@@ -319,6 +325,7 @@ function updateNodes(now) {
 function updateView(now = performance.now()) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
   elements.hacksCount.textContent = formatHacks(state.hacks);
+  elements.totalHacksCount.textContent = formatHacks(state.totalHacks);
   elements.hacksPerSecond.textContent = getAutoRate(state).toFixed(2);
   elements.sessionTimer.textContent = formatDuration((Date.now() - state.sessionStartedAt) / 1000);
   elements.inputState.textContent = activeInput ? "ACTIVE" : "STANDBY";
