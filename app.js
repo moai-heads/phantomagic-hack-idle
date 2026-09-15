@@ -10,7 +10,7 @@ import {
   getUpgradeCost,
   getUpgradeLevel,
   normalizeState,
-} from "./game.js";
+} from "./game.js?v=firefox-20260915";
 
 const STREAM_TEMPLATES = Object.freeze([
   "ssh ghost@10.13.37.4 -p 443",
@@ -34,6 +34,7 @@ const MANUAL_DECAY_DELAY = 1100;
 const MANUAL_DECAY_RATE = 0.12;
 
 const elements = {
+  appShell: document.querySelector("#appShell"),
   hacksCount: document.querySelector("#hacksCount"),
   hacksPerSecond: document.querySelector("#hacksPerSecond"),
   sessionTimer: document.querySelector("#sessionTimer"),
@@ -224,7 +225,8 @@ function recordKey(key) {
 
 function handleGlobalKey(event) {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (event.target instanceof HTMLElement && event.target.closest("button") && (event.key === " " || event.key === "Enter")) return;
+  const targetElement = event.target && typeof event.target.closest === "function" ? event.target : null;
+  if (targetElement?.closest("button") && (event.key === " " || event.key === "Enter")) return;
 
   const isTypingKey = event.key.length === 1 || event.key === "Backspace" || event.key === "Delete";
   if (!isTypingKey) return;
@@ -234,10 +236,13 @@ function handleGlobalKey(event) {
 }
 
 function handlePaste(event) {
-  if (event.defaultPrevented || event.clipboardData?.types.includes("text/plain") !== true) return;
+  const pastedText = event.clipboardData && typeof event.clipboardData.getData === "function"
+    ? event.clipboardData.getData("text/plain")
+    : "";
+  if (event.defaultPrevented || !pastedText) return;
   event.preventDefault();
-  const pastedText = event.clipboardData.getData("text").slice(-MAX_NOTE_BUFFER);
-  for (const character of pastedText) {
+  const clippedText = pastedText.slice(-MAX_NOTE_BUFFER);
+  for (const character of clippedText) {
     if (character.length === 1) recordKey(character);
   }
 }
@@ -373,8 +378,8 @@ function handleUpgrade(upgradeId) {
   saveState();
 }
 
-window.addEventListener("keydown", handleGlobalKey, { capture: true });
-window.addEventListener("paste", handlePaste, { capture: true });
+document.addEventListener("keydown", handleGlobalKey, true);
+document.addEventListener("paste", handlePaste, true);
 
 for (const [upgradeId, upgradeView] of Object.entries(upgradeElements)) {
   upgradeView.button.addEventListener("click", () => handleUpgrade(upgradeId));
@@ -392,3 +397,4 @@ document.addEventListener("visibilitychange", () => {
 updateNoteBuffer();
 updateView(performance.now());
 window.requestAnimationFrame(gameLoop);
+window.setTimeout(() => elements.appShell?.focus({ preventScroll: true }), 0);
