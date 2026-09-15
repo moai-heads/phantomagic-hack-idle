@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#020503" />
+    <meta
+      name="description"
+      content="PHANTOMAGIC is a monochrome terminal idle game about typing, hacking, and upgrading autonomous nodes."
+    />
+    <title>PHANTOMAGIC // HACK IDLE</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup" aria-label="Phantomagic Hack Idle">
+          <span class="brand-mark" aria-hidden="true">◈</span>
+          <span class="brand-name">PHANTOMAGIC</span>
+          <span class="brand-divider">//</span>
+          <span class="brand-subtitle">HACK IDLE</span>
+        </div>
+        <div class="system-readout">
+          <span class="status-light" aria-hidden="true"></span>
+          <span>LINK: <strong>SECURE</strong></span>
+          <span class="readout-divider">|</span>
+          <span id="clockReadout">SYS 00:00:00</span>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="playfield" aria-labelledby="networkHeading">
+          <div class="hud-row">
+            <div class="score-block">
+              <div class="eyebrow">ACCESS TOKENS // SCORE</div>
+              <div class="score-line">
+                <span id="hacksCount" class="score-value">000000</span>
+                <span class="score-unit">HACKS</span>
+              </div>
+              <div class="score-caption"><span class="signal-dot"></span> keep the signal alive</div>
+            </div>
+            <div class="metric-grid" aria-label="Game metrics">
+              <div class="metric">
+                <span class="metric-label">OUTPUT</span>
+                <strong id="hacksPerSecond">0.00</strong>
+                <span class="metric-suffix">HPS</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">SESSION</span>
+                <strong id="sessionTimer">00:00</strong>
+                <span class="metric-suffix">UPTIME</span>
+              </div>
+              <div class="metric">
+                <span class="metric-label">INPUT</span>
+                <strong id="inputState">STANDBY</strong>
+                <span class="metric-suffix">NODE 01</span>
+              </div>
+            </div>
+          </div>
+
+          <section class="panel node-panel" aria-labelledby="networkHeading">
+            <div class="panel-heading">
+              <div>
+                <div class="eyebrow">NETWORK TOPOLOGY</div>
+                <h1 id="networkHeading">LIVE ACCESS NODES</h1>
+              </div>
+              <div class="panel-index">GRID 01 / 02</div>
+            </div>
+
+            <div class="diagram-wrap">
+              <div class="diagram-network" role="group" aria-label="Hack node network">
+                <article class="node-card active-node">
+                  <div class="node-heading">
+                    <span class="node-tag">NODE 01</span>
+                    <span class="node-state" id="manualNodeState">LISTENING</span>
+                  </div>
+                  <div class="node-core" id="manualCore" aria-label="Manual typing charge">
+                    <div class="core-grid" aria-hidden="true"></div>
+                    <div class="core-fill" id="manualFill"></div>
+                    <div class="core-scan" aria-hidden="true"></div>
+                    <span class="node-percent" id="manualPercent">00%</span>
+                    <span class="node-glyph" aria-hidden="true">⌁</span>
+                  </div>
+                  <div class="node-footer">
+                    <span>KEYBOARD FEED</span>
+                    <span id="manualCycleText">10.0s CYCLE</span>
+                  </div>
+                </article>
+
+                <div class="node-connector" aria-hidden="true">
+                  <span class="connector-line"></span>
+                  <span class="connector-pulse"></span>
+                  <span class="connector-label">SYNC BUS</span>
+                </div>
+
+                <article class="node-card auto-node locked" id="autoNode">
+                  <div class="node-heading">
+                    <span class="node-tag">NODE 02</span>
+                    <span class="node-state" id="autoNodeState">OFFLINE</span>
+                  </div>
+                  <div class="node-core" id="autoCore" aria-label="Autohacker charge">
+                    <div class="core-grid" aria-hidden="true"></div>
+                    <div class="core-fill" id="autoFill"></div>
+                    <div class="core-scan" aria-hidden="true"></div>
+                    <span class="node-percent" id="autoPercent">--</span>
+                    <span class="node-glyph" aria-hidden="true">⟳</span>
+                  </div>
+                  <div class="node-footer">
+                    <span id="autoNodeDetail">AWAITING PURCHASE</span>
+                    <span id="autoCycleText">LOCKED</span>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div class="node-readout">
+              <span><i class="readout-key">MANUAL</i> maintain input for ten seconds to mint one hack</span>
+              <span><i class="readout-key">AUTO</i> click autohacker upgrades to increase passive output</span>
+            </div>
+          </section>
+
+          <section class="panel terminal-panel" aria-labelledby="terminalHeading">
+            <div class="panel-heading terminal-heading">
+              <div>
+                <div class="eyebrow">INTERACTIVE SHELL</div>
+                <h2 id="terminalHeading">TERMINAL // LIVE FEED</h2>
+              </div>
+              <div class="terminal-status"><span class="status-light"></span> INPUT READY</div>
+            </div>
+            <div class="terminal-screen" id="terminalScreen" role="log" aria-live="polite" aria-label="Terminal output">
+              <div class="terminal-line dim"><span class="terminal-time">00:00:00</span> <span>phantomagic kernel online :: awaiting keystrokes</span></div>
+              <div class="terminal-line dim"><span class="terminal-time">00:00:00</span> <span>tip: type anything. the movies lied, but the numbers are real.</span></div>
+            </div>
+            <form class="terminal-form" id="terminalForm" autocomplete="off">
+              <label class="terminal-prompt" for="terminalInput">guest@phantomagic:~$</label>
+              <input
+                id="terminalInput"
+                name="command"
+                type="text"
+                spellcheck="false"
+                autocapitalize="off"
+                autocomplete="off"
+                aria-label="Type fake terminal commands or mash the keyboard"
+                placeholder="type to feed node 01..."
+              />
+              <button class="sr-only" type="submit">Submit command</button>
+            </form>
+          </section>
+
+          <div class="code-stream" id="codeStream" aria-hidden="true"></div>
+        </section>
+
+        <aside class="sidebar" aria-labelledby="upgradesHeading">
+          <div class="sidebar-heading">
+            <div>
+              <div class="eyebrow">OPERATIONS DECK</div>
+              <h2 id="upgradesHeading">UPGRADES</h2>
+            </div>
+            <span class="sidebar-count" id="upgradeCount">01/04</span>
+          </div>
+          <div class="sidebar-rule"></div>
+
+          <section class="upgrade-list" id="upgradeList" aria-label="Available upgrades">
+            <button class="upgrade-card" type="button" data-upgrade="amplifier">
+              <span class="upgrade-topline">
+                <span class="upgrade-name">KEYSTROKE AMPLIFIER</span>
+                <span class="upgrade-level" id="amplifierLevel">LV 0</span>
+              </span>
+              <span class="upgrade-description">compresses manual signal bursts</span>
+              <span class="upgrade-bottomline">
+                <span class="upgrade-effect" id="amplifierEffect">+0% manual speed</span>
+                <span class="upgrade-cost"><span class="cost-icon">◆</span><span id="amplifierCost">3</span></span>
+              </span>
+            </button>
+
+            <button class="upgrade-card" type="button" data-upgrade="autohacker">
+              <span class="upgrade-topline">
+                <span class="upgrade-name">AUTOHACKER</span>
+                <span class="upgrade-level" id="autohackerLevel">OFFLINE</span>
+              </span>
+              <span class="upgrade-description">spawns a second autonomous node</span>
+              <span class="upgrade-bottomline">
+                <span class="upgrade-effect" id="autohackerEffect">+0.00 HPS</span>
+                <span class="upgrade-cost"><span class="cost-icon">◆</span><span id="autohackerCost">6</span></span>
+              </span>
+            </button>
+
+            <button class="upgrade-card future-card" type="button" disabled>
+              <span class="upgrade-topline">
+                <span class="upgrade-name">PACKET MIRROR</span>
+                <span class="upgrade-level">LOCKED</span>
+              </span>
+              <span class="upgrade-description">duplicate the cleanest signal</span>
+              <span class="upgrade-bottomline">
+                <span class="upgrade-effect">coming in next patch</span>
+                <span class="lock-icon">▧</span>
+              </span>
+            </button>
+
+            <button class="upgrade-card future-card" type="button" disabled>
+              <span class="upgrade-topline">
+                <span class="upgrade-name">GHOST PROXY</span>
+                <span class="upgrade-level">LOCKED</span>
+              </span>
+              <span class="upgrade-description">route around the visible firewall</span>
+              <span class="upgrade-bottomline">
+                <span class="upgrade-effect">coming in next patch</span>
+                <span class="lock-icon">▧</span>
+              </span>
+            </button>
+          </section>
+
+          <section class="event-panel" aria-labelledby="eventHeading">
+            <div class="event-heading">
+              <span class="eyebrow" id="eventHeading">EVENT BUFFER</span>
+              <span class="buffer-status">LIVE</span>
+            </div>
+            <div class="event-log" id="eventLog" role="log" aria-live="polite">
+              <div class="event-line"><span class="event-bullet">+</span><span>signal channel opened</span></div>
+              <div class="event-line"><span class="event-bullet">+</span><span>manual node standing by</span></div>
+            </div>
+          </section>
+
+          <div class="sidebar-footer">
+            <span>LOCAL SAVE ENABLED</span>
+            <button id="resetButton" class="text-button" type="button">RESET SESSION</button>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="footer-bar">
+        <span>PHANTOMAGIC SYSTEMS // BUILD 0.1.0</span>
+        <span>TYPE. CHARGE. HACK.</span>
+        <span id="saveStatus">LOCAL STATE SYNCED</span>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
