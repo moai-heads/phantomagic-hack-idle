@@ -397,6 +397,14 @@ h2 {
     inset 0 0 26px rgba(25, 255, 79, 0.06);
 }
 
+.node-core.repeat-rejected {
+  border-color: var(--amber);
+  box-shadow:
+    0 0 0 5px rgba(199, 230, 124, 0.035),
+    0 0 24px rgba(199, 230, 124, 0.18),
+    inset 0 0 26px rgba(199, 230, 124, 0.06);
+}
+
 .node-core::before,
 .node-core::after {
   position: absolute;

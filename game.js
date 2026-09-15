@@ -38,7 +38,14 @@ export function getUpgradeCost(upgradeId, currentLevel) {
 }
 
 export function getManualRate(state) {
-  return (1 / 10) * (1 + state.amplifierLevel * 0.15);
+  // The base manual node now mints one hack per second of valid input.
+  return 1 * (1 + state.amplifierLevel * 0.15);
+}
+
+export function isDistinctKey(previousKey, nextKey) {
+  const previous = String(previousKey || "").trim().toLowerCase();
+  const next = String(nextKey || "").trim().toLowerCase();
+  return Boolean(next) && next !== previous;
 }
 
 export function getAutoRate(state) {

@@ -7,6 +7,7 @@ import {
   formatDuration,
   getAutoRate,
   getManualRate,
+  isDistinctKey,
   getUpgradeCost,
   getUpgradeLevel,
   normalizeState,
@@ -78,7 +79,11 @@ const upgradeElements = {
 let state = loadState();
 let lastFrame = performance.now();
 let lastInputAt = 0;
+let lastAcceptedKey = "";
+let lastRejectedAt = 0;
+let lastRejectedNoticeAt = 0;
 let previousInputValue = "";
+let keydownInputPending = false;
 let toastTimeout;
 let ambientStreamTimeout;
 
@@ -117,7 +122,11 @@ function saveState() {
 function resetState() {
   state = createDefaultState(Date.now());
   lastInputAt = 0;
+  lastAcceptedKey = "";
+  lastRejectedAt = 0;
+  lastRejectedNoticeAt = 0;
   previousInputValue = "";
+  keydownInputPending = false;
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
@@ -238,17 +247,35 @@ function earnHacks(amount, reason = "manual node") {
   showToast(`HACK MINTED // +${amount}`);
 }
 
-function registerInput(inputValue = "") {
+function registerDistinctKey(keyIdentity, displayKey = "") {
   const now = performance.now();
-  lastInputAt = now;
-  const delta = Math.max(1, Math.abs(inputValue.length - previousInputValue.length));
-  state.totalTyped += delta;
-  previousInputValue = inputValue;
-
-  const burstCount = Math.min(3, Math.max(1, Math.ceil(delta / 3)));
-  for (let index = 0; index < burstCount; index += 1) {
-    spawnStreamLine(fakeLineFromInput(inputValue), index > 0);
+  if (!isDistinctKey(lastAcceptedKey, keyIdentity)) {
+    lastRejectedAt = now;
+    if (now - lastRejectedNoticeAt > 900) {
+      lastRejectedNoticeAt = now;
+      spawnStreamLine(`[hold] ${displayKey || "key"} rejected :: vary input`, true);
+    }
+    return false;
   }
+
+  lastAcceptedKey = keyIdentity;
+  lastInputAt = now;
+  state.totalTyped += 1;
+  spawnStreamLine(fakeLineFromInput(elements.terminalInput.value || displayKey));
+  return true;
+}
+
+function insertedText(previousValue, nextValue) {
+  if (nextValue.startsWith(previousValue)) return nextValue.slice(previousValue.length);
+  return nextValue;
+}
+
+function registerUntrackedInput(inputValue = "") {
+  const pastedText = insertedText(previousInputValue, inputValue);
+  for (const character of pastedText) {
+    registerDistinctKey(`paste:${character.toLowerCase()}`, character);
+  }
+  previousInputValue = inputValue;
 }
 
 function commandResponse(command) {
@@ -317,12 +344,14 @@ function updateUpgradeView() {
 
 function updateNodes(now) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
+  const repeatedKey = lastRejectedAt > 0 && now - lastRejectedAt <= 650;
   const manualPercent = Math.min(99, Math.floor(state.manualProgress * 100));
   elements.manualFill.style.height = `${state.manualProgress * 100}%`;
   elements.manualPercent.textContent = `${String(manualPercent).padStart(2, "0")}%`;
-  elements.manualNodeState.textContent = activeInput ? "CHARGING" : state.manualProgress > 0 ? "HOLDING" : "LISTENING";
+  elements.manualNodeState.textContent = repeatedKey ? "VARY KEYS" : activeInput ? "CHARGING" : state.manualProgress > 0 ? "HOLDING" : "LISTENING";
   elements.manualCycleText.textContent = `${(1 / getManualRate(state)).toFixed(1)}s CYCLE`;
   elements.manualCore.classList.toggle("charging", activeInput);
+  elements.manualCore.classList.toggle("repeat-rejected", repeatedKey);
 
   const autoOnline = state.autohackerLevel > 0;
   elements.autoNode.classList.toggle("locked", !autoOnline);
@@ -345,10 +374,11 @@ function updateNodes(now) {
 
 function updateView(now = performance.now()) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
+  const repeatedKey = lastRejectedAt > 0 && now - lastRejectedAt <= 650;
   elements.hacksCount.textContent = formatHacks(state.hacks);
   elements.hacksPerSecond.textContent = getAutoRate(state).toFixed(2);
   elements.sessionTimer.textContent = formatDuration((Date.now() - state.sessionStartedAt) / 1000);
-  elements.inputState.textContent = activeInput ? "ACTIVE" : "STANDBY";
+  elements.inputState.textContent = repeatedKey ? "VARY KEYS" : activeInput ? "ACTIVE" : "STANDBY";
   elements.clockReadout.textContent = `SYS ${formatSystemClock()}`;
   updateNodes(now);
   updateUpgradeView();
@@ -405,8 +435,20 @@ function handleUpgrade(upgradeId) {
   saveState();
 }
 
+elements.terminalInput.addEventListener("keydown", (event) => {
+  const isChargeableKey = event.key.length === 1 || event.key === "Backspace" || event.key === "Delete";
+  if (!isChargeableKey) return;
+
+  // Mark the following input event as keydown-driven so normal typing is only counted once.
+  keydownInputPending = true;
+  registerDistinctKey(event.code || event.key, event.key);
+});
+
 elements.terminalInput.addEventListener("input", (event) => {
-  registerInput(event.currentTarget.value);
+  const nextValue = event.currentTarget.value;
+  if (!keydownInputPending) registerUntrackedInput(nextValue);
+  previousInputValue = nextValue;
+  keydownInputPending = false;
 });
 
 elements.terminalForm.addEventListener("submit", (event) => {
