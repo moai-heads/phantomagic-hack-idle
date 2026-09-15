@@ -38,8 +38,8 @@ export function getUpgradeCost(upgradeId, currentLevel) {
 }
 
 export function getManualRate(state) {
-  // Fast global typing should feel like a burst, not a ten-second charge-up.
-  return 4 * (1 + state.amplifierLevel * 0.15);
+  // The base manual node mints one hack every two seconds of active typing.
+  return 0.5 * (1 + state.amplifierLevel * 0.15);
 }
 
 export function getAutoRate(state) {

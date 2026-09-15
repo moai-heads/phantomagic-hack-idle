@@ -2,7 +2,7 @@
 
 A tiny terminal idle game for people who enjoy the look of movie hacking montages.
 
-Type anywhere while the game window is active to feed the manual node. The terminal auto-scrolls a fake line for every key and keeps the recent input in a note buffer. The manual node now charges in fast bursts; repeated keys are allowed for the current prototype. Spend hacks on upgrades: bring an autonomous hacker online, then click it again to improve its throughput. Your progress is saved locally in the browser.
+Type anywhere while the game window is active to feed the manual node. The terminal auto-scrolls a fake line for every key and keeps a count of recent input in a note buffer without printing the raw keys. The manual node now mints one hack every two seconds at base speed; repeated keys are allowed for the current prototype. Spend hacks on upgrades: bring an autonomous hacker online, then click it again to improve its throughput. Your progress is saved locally in the browser.
 
 ## Run locally
 

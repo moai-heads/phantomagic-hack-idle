@@ -143,25 +143,15 @@ function randomHex(length = 4) {
   return Array.from({ length }, () => HEX[Math.floor(Math.random() * HEX.length)]).join("");
 }
 
-function fakeLineFromInput(input = "") {
-  const cleanInput = input.replace(/\s+/g, " ").trim();
+function fakeLineFromInput() {
   const template = STREAM_TEMPLATES[Math.floor(Math.random() * STREAM_TEMPLATES.length)];
-  if (cleanInput && Math.random() > 0.35) {
-    const fragment = cleanInput.slice(-Math.min(cleanInput.length, 24));
-    return `${template}  // ${fragment}`;
-  }
   return template.replace(/0x7F3A|0x[0-9A-F]+/i, `0x${randomHex(4)}`);
 }
 
-function keyLabel(key) {
-  if (key === " ") return "SPC";
-  if (key === "Backspace") return "BKSP";
-  if (key === "Delete") return "DEL";
-  return key.length > 9 ? key.slice(0, 9).toUpperCase() : key.toUpperCase();
-}
-
 function updateNoteBuffer() {
-  elements.noteBuffer.textContent = noteBuffer || "awaiting global input...";
+  elements.noteBuffer.textContent = noteBuffer
+    ? `signal buffered // ${noteBuffer.length} chars retained`
+    : "awaiting global input...";
   elements.noteBufferCount.textContent = `${String(noteBuffer.length).padStart(2, "0")}/${MAX_NOTE_BUFFER}`;
 }
 
@@ -228,8 +218,8 @@ function recordKey(key) {
   state.totalTyped += 1;
   updateNoteBufferWithKey(key);
 
-  const fakeCommand = fakeLineFromInput(noteBuffer || key);
-  appendTerminal("output", `${fakeCommand}  :: ${keyLabel(key)} / packet ${randomHex(4)}`);
+  const fakeCommand = fakeLineFromInput();
+  appendTerminal("output", `${fakeCommand}  :: packet ${randomHex(4)}`);
 }
 
 function handleGlobalKey(event) {
