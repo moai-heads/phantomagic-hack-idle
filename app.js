@@ -84,6 +84,7 @@ let lastFrame = performance.now();
 let lastInputAt = 0;
 let noteBuffer = "";
 let noteBufferLine = "";
+let lastTemplateIndex = -1;
 let toastTimeout;
 
 function loadState() {
@@ -123,6 +124,7 @@ function resetState() {
   lastInputAt = 0;
   noteBuffer = "";
   noteBufferLine = "";
+  lastTemplateIndex = -1;
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
@@ -150,7 +152,10 @@ function randomHex(length = 4) {
 }
 
 function fakeLineFromInput() {
-  const template = STREAM_TEMPLATES[Math.floor(Math.random() * STREAM_TEMPLATES.length)];
+  let templateIndex = Math.floor(Math.random() * STREAM_TEMPLATES.length);
+  if (templateIndex === lastTemplateIndex) templateIndex = (templateIndex + 1) % STREAM_TEMPLATES.length;
+  lastTemplateIndex = templateIndex;
+  const template = STREAM_TEMPLATES[templateIndex];
   return template.replace(/0x7F3A|0x[0-9A-F]+/i, `0x${randomHex(4)}`);
 }
 
