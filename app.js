@@ -7,7 +7,6 @@ import {
   formatDuration,
   getAutoRate,
   getManualRate,
-  isDistinctKey,
   getUpgradeCost,
   getUpgradeLevel,
   normalizeState,
@@ -27,11 +26,12 @@ const STREAM_TEMPLATES = Object.freeze([
 ]);
 
 const HEX = "0123456789ABCDEF";
-const MAX_TERMINAL_LINES = 38;
+const MAX_TERMINAL_LINES = 64;
 const MAX_EVENTS = 8;
-const ACTIVE_INPUT_WINDOW = 850;
-const MANUAL_DECAY_DELAY = 1250;
-const MANUAL_DECAY_RATE = 0.075;
+const MAX_NOTE_BUFFER = 96;
+const ACTIVE_INPUT_WINDOW = 650;
+const MANUAL_DECAY_DELAY = 1100;
+const MANUAL_DECAY_RATE = 0.12;
 
 const elements = {
   hacksCount: document.querySelector("#hacksCount"),
@@ -51,9 +51,8 @@ const elements = {
   autoNodeDetail: document.querySelector("#autoNodeDetail"),
   autoCycleText: document.querySelector("#autoCycleText"),
   terminalScreen: document.querySelector("#terminalScreen"),
-  terminalForm: document.querySelector("#terminalForm"),
-  terminalInput: document.querySelector("#terminalInput"),
-  codeStream: document.querySelector("#codeStream"),
+  noteBuffer: document.querySelector("#noteBuffer"),
+  noteBufferCount: document.querySelector("#noteBufferCount"),
   eventLog: document.querySelector("#eventLog"),
   upgradeCount: document.querySelector("#upgradeCount"),
   saveStatus: document.querySelector("#saveStatus"),
@@ -79,13 +78,8 @@ const upgradeElements = {
 let state = loadState();
 let lastFrame = performance.now();
 let lastInputAt = 0;
-let lastAcceptedKey = "";
-let lastRejectedAt = 0;
-let lastRejectedNoticeAt = 0;
-let previousInputValue = "";
-let keydownInputPending = false;
+let noteBuffer = "";
 let toastTimeout;
-let ambientStreamTimeout;
 
 function loadState() {
   const now = Date.now();
@@ -122,24 +116,19 @@ function saveState() {
 function resetState() {
   state = createDefaultState(Date.now());
   lastInputAt = 0;
-  lastAcceptedKey = "";
-  lastRejectedAt = 0;
-  lastRejectedNoticeAt = 0;
-  previousInputValue = "";
-  keydownInputPending = false;
+  noteBuffer = "";
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
     // Local storage can be blocked in private browsing; the session still resets.
   }
-  elements.terminalInput.value = "";
   clearTerminal();
-  appendTerminal("output", "session reset :: manual node standing by");
+  updateNoteBuffer();
+  appendTerminal("output", "session reset :: global keyboard feed standing by");
   addEvent("local session reset");
   showToast("SESSION RESET // SIGNAL CLEAN");
   updateView(performance.now());
   saveState();
-  elements.terminalInput.focus();
 }
 
 function formatHacks(value) {
@@ -157,39 +146,36 @@ function randomHex(length = 4) {
 function fakeLineFromInput(input = "") {
   const cleanInput = input.replace(/\s+/g, " ").trim();
   const template = STREAM_TEMPLATES[Math.floor(Math.random() * STREAM_TEMPLATES.length)];
-  if (!cleanInput) return template;
-  if (cleanInput.length > 3 && Math.random() > 0.45) {
-    const fragment = cleanInput.slice(-Math.min(cleanInput.length, 18));
+  if (cleanInput && Math.random() > 0.35) {
+    const fragment = cleanInput.slice(-Math.min(cleanInput.length, 24));
     return `${template}  // ${fragment}`;
   }
   return template.replace(/0x7F3A|0x[0-9A-F]+/i, `0x${randomHex(4)}`);
 }
 
-function spawnStreamLine(text = fakeLineFromInput(), dim = false) {
-  if (!elements.codeStream) return;
-  const line = document.createElement("span");
-  line.className = `stream-line${dim ? " dim" : ""}`;
-  line.textContent = text;
-  line.style.left = `${Math.round(4 + Math.random() * 74)}%`;
-  line.style.setProperty("--stream-duration", `${(2.1 + Math.random() * 1.9).toFixed(2)}s`);
-  line.style.setProperty("--stream-drift", `${Math.round(-30 + Math.random() * 58)}px`);
-  elements.codeStream.append(line);
-  line.addEventListener("animationend", () => line.remove(), { once: true });
+function keyLabel(key) {
+  if (key === " ") return "SPC";
+  if (key === "Backspace") return "BKSP";
+  if (key === "Delete") return "DEL";
+  return key.length > 9 ? key.slice(0, 9).toUpperCase() : key.toUpperCase();
 }
 
-function scheduleAmbientStream() {
-  window.clearTimeout(ambientStreamTimeout);
-  const delay = 1800 + Math.random() * 2600;
-  ambientStreamTimeout = window.setTimeout(() => {
-    if (lastInputAt && performance.now() - lastInputAt < 4000) {
-      spawnStreamLine(fakeLineFromInput(), true);
-    }
-    scheduleAmbientStream();
-  }, delay);
+function updateNoteBuffer() {
+  elements.noteBuffer.textContent = noteBuffer || "awaiting global input...";
+  elements.noteBufferCount.textContent = `${String(noteBuffer.length).padStart(2, "0")}/${MAX_NOTE_BUFFER}`;
 }
 
-function currentTimeLabel() {
-  return formatSystemClock();
+function updateNoteBufferWithKey(key) {
+  if (key === "Backspace" || key === "Delete") {
+    noteBuffer = noteBuffer.slice(0, -1);
+  } else if (key.length === 1) {
+    noteBuffer += key;
+  }
+
+  if (noteBuffer.length > MAX_NOTE_BUFFER) {
+    noteBuffer = noteBuffer.slice(-MAX_NOTE_BUFFER);
+  }
+  updateNoteBuffer();
 }
 
 function appendTerminal(kind, text) {
@@ -198,7 +184,7 @@ function appendTerminal(kind, text) {
 
   const timestamp = document.createElement("span");
   timestamp.className = "terminal-time";
-  timestamp.textContent = currentTimeLabel();
+  timestamp.textContent = formatSystemClock();
 
   const message = document.createElement("span");
   message.textContent = text;
@@ -237,77 +223,42 @@ function showToast(message) {
   toastTimeout = window.setTimeout(() => elements.toast.classList.remove("visible"), 2300);
 }
 
+function recordKey(key) {
+  lastInputAt = performance.now();
+  state.totalTyped += 1;
+  updateNoteBufferWithKey(key);
+
+  const fakeCommand = fakeLineFromInput(noteBuffer || key);
+  appendTerminal("output", `${fakeCommand}  :: ${keyLabel(key)} / packet ${randomHex(4)}`);
+}
+
+function handleGlobalKey(event) {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.target instanceof HTMLElement && event.target.closest("button") && (event.key === " " || event.key === "Enter")) return;
+
+  const isTypingKey = event.key.length === 1 || event.key === "Backspace" || event.key === "Delete";
+  if (!isTypingKey) return;
+
+  event.preventDefault();
+  recordKey(event.key);
+}
+
+function handlePaste(event) {
+  if (event.defaultPrevented || event.clipboardData?.types.includes("text/plain") !== true) return;
+  event.preventDefault();
+  const pastedText = event.clipboardData.getData("text").slice(-MAX_NOTE_BUFFER);
+  for (const character of pastedText) {
+    if (character.length === 1) recordKey(character);
+  }
+}
+
 function earnHacks(amount, reason = "manual node") {
   if (!amount) return;
   state.hacks += amount;
   state.totalManualMints += reason === "manual node" ? amount : 0;
   appendTerminal("output", `${reason} :: +${amount} hack${amount === 1 ? "" : "s"} minted`);
   addEvent(`${reason} minted +${amount} hack${amount === 1 ? "" : "s"}`);
-  spawnStreamLine(`[mint] ${reason} :: +${amount} HACK${amount === 1 ? "" : "S"}`);
   showToast(`HACK MINTED // +${amount}`);
-}
-
-function registerDistinctKey(keyIdentity, displayKey = "") {
-  const now = performance.now();
-  if (!isDistinctKey(lastAcceptedKey, keyIdentity)) {
-    lastRejectedAt = now;
-    if (now - lastRejectedNoticeAt > 900) {
-      lastRejectedNoticeAt = now;
-      spawnStreamLine(`[hold] ${displayKey || "key"} rejected :: vary input`, true);
-    }
-    return false;
-  }
-
-  lastAcceptedKey = keyIdentity;
-  lastInputAt = now;
-  state.totalTyped += 1;
-  spawnStreamLine(fakeLineFromInput(elements.terminalInput.value || displayKey));
-  return true;
-}
-
-function insertedText(previousValue, nextValue) {
-  if (nextValue.startsWith(previousValue)) return nextValue.slice(previousValue.length);
-  return nextValue;
-}
-
-function registerUntrackedInput(inputValue = "") {
-  const pastedText = insertedText(previousInputValue, inputValue);
-  for (const character of pastedText) {
-    registerDistinctKey(`paste:${character.toLowerCase()}`, character);
-  }
-  previousInputValue = inputValue;
-}
-
-function commandResponse(command) {
-  const normalized = command.trim().toLowerCase();
-  const autoRate = getAutoRate(state);
-  switch (normalized) {
-    case "":
-      return "empty payload accepted :: keep typing";
-    case "help":
-      return "commands: help | status | scan | clear :: all other input is classified as code";
-    case "status":
-      return `hacks=${state.hacks} :: manual=${Math.floor(state.manualProgress * 100)}% :: auto=${autoRate.toFixed(2)} HPS`;
-    case "scan":
-      spawnStreamLine("[scan] 3 open ghosts found :: pretending this is legal");
-      return "scan complete :: 172.16.0.0/16 is mostly somebody's printer";
-    case "clear":
-      clearTerminal();
-      return "terminal buffer cleared :: signal retained";
-    default:
-      return `[exec] ${command.slice(0, 72)} :: process forked :: no witnesses detected`;
-  }
-}
-
-function submitCommand() {
-  const command = elements.terminalInput.value.trim();
-  appendTerminal("command", `guest@phantomagic:~$ ${command || "_"}`);
-  const response = commandResponse(command);
-  if (command.toLowerCase() !== "clear") appendTerminal("output", response);
-  elements.terminalInput.value = "";
-  previousInputValue = "";
-  spawnStreamLine(command ? `> ${command.slice(0, 42)}` : "> _", true);
-  elements.terminalInput.focus();
 }
 
 function updateUpgradeView() {
@@ -344,14 +295,12 @@ function updateUpgradeView() {
 
 function updateNodes(now) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
-  const repeatedKey = lastRejectedAt > 0 && now - lastRejectedAt <= 650;
   const manualPercent = Math.min(99, Math.floor(state.manualProgress * 100));
   elements.manualFill.style.height = `${state.manualProgress * 100}%`;
   elements.manualPercent.textContent = `${String(manualPercent).padStart(2, "0")}%`;
-  elements.manualNodeState.textContent = repeatedKey ? "VARY KEYS" : activeInput ? "CHARGING" : state.manualProgress > 0 ? "HOLDING" : "LISTENING";
-  elements.manualCycleText.textContent = `${(1 / getManualRate(state)).toFixed(1)}s CYCLE`;
+  elements.manualNodeState.textContent = activeInput ? "CHARGING" : state.manualProgress > 0 ? "HOLDING" : "LISTENING";
+  elements.manualCycleText.textContent = `${(1 / getManualRate(state)).toFixed(2)}s CYCLE`;
   elements.manualCore.classList.toggle("charging", activeInput);
-  elements.manualCore.classList.toggle("repeat-rejected", repeatedKey);
 
   const autoOnline = state.autohackerLevel > 0;
   elements.autoNode.classList.toggle("locked", !autoOnline);
@@ -374,11 +323,10 @@ function updateNodes(now) {
 
 function updateView(now = performance.now()) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
-  const repeatedKey = lastRejectedAt > 0 && now - lastRejectedAt <= 650;
   elements.hacksCount.textContent = formatHacks(state.hacks);
   elements.hacksPerSecond.textContent = getAutoRate(state).toFixed(2);
   elements.sessionTimer.textContent = formatDuration((Date.now() - state.sessionStartedAt) / 1000);
-  elements.inputState.textContent = repeatedKey ? "VARY KEYS" : activeInput ? "ACTIVE" : "STANDBY";
+  elements.inputState.textContent = activeInput ? "ACTIVE" : "STANDBY";
   elements.clockReadout.textContent = `SYS ${formatSystemClock()}`;
   updateNodes(now);
   updateUpgradeView();
@@ -435,26 +383,8 @@ function handleUpgrade(upgradeId) {
   saveState();
 }
 
-elements.terminalInput.addEventListener("keydown", (event) => {
-  const isChargeableKey = event.key.length === 1 || event.key === "Backspace" || event.key === "Delete";
-  if (!isChargeableKey) return;
-
-  // Mark the following input event as keydown-driven so normal typing is only counted once.
-  keydownInputPending = true;
-  registerDistinctKey(event.code || event.key, event.key);
-});
-
-elements.terminalInput.addEventListener("input", (event) => {
-  const nextValue = event.currentTarget.value;
-  if (!keydownInputPending) registerUntrackedInput(nextValue);
-  previousInputValue = nextValue;
-  keydownInputPending = false;
-});
-
-elements.terminalForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  submitCommand();
-});
+window.addEventListener("keydown", handleGlobalKey, { capture: true });
+window.addEventListener("paste", handlePaste, { capture: true });
 
 for (const [upgradeId, upgradeView] of Object.entries(upgradeElements)) {
   upgradeView.button.addEventListener("click", () => handleUpgrade(upgradeId));
@@ -469,7 +399,6 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") saveState();
 });
 
+updateNoteBuffer();
 updateView(performance.now());
-scheduleAmbientStream();
 window.requestAnimationFrame(gameLoop);
-window.setTimeout(() => elements.terminalInput.focus(), 250);

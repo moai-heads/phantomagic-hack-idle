@@ -7,15 +7,14 @@ import {
   formatDuration,
   getAutoRate,
   getManualRate,
-  isDistinctKey,
   getUpgradeCost,
   normalizeState,
 } from "../game.js";
 
-test("new sessions start with empty score and one-second manual cycles", () => {
+test("new sessions start with empty score and fast manual cycles", () => {
   const state = createDefaultState(123);
   assert.equal(state.hacks, 0);
-  assert.equal(getManualRate(state), 1);
+  assert.equal(getManualRate(state), 4);
   assert.equal(getAutoRate(state), 0);
 });
 
@@ -27,14 +26,7 @@ test("upgrade costs scale and purchases spend hacks", () => {
   assert.equal(result.ok, true);
   assert.equal(result.level, 1);
   assert.equal(result.state.hacks, 17);
-  assert.ok(Math.abs(getManualRate(result.state) - 1.15) < 1e-12);
-});
-
-test("repeating one key does not count as varied input", () => {
-  assert.equal(isDistinctKey("KeyF", "KeyF"), false);
-  assert.equal(isDistinctKey("keyf", "KEYF"), false);
-  assert.equal(isDistinctKey("KeyF", "KeyG"), true);
-  assert.equal(isDistinctKey("", "KeyF"), true);
+  assert.ok(Math.abs(getManualRate(result.state) - 4.6) < 1e-12);
 });
 
 test("autohacker output is passive and amplifier boosts it", () => {

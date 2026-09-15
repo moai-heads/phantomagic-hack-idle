@@ -122,8 +122,8 @@
           <section class="panel terminal-panel" aria-labelledby="terminalHeading">
             <div class="panel-heading terminal-heading">
               <div>
-                <div class="eyebrow">INTERACTIVE SHELL</div>
-                <h2 id="terminalHeading">TERMINAL // LIVE FEED</h2>
+                <div class="eyebrow">GLOBAL INPUT SHELL</div>
+                <h2 id="terminalHeading">TERMINAL // AUTO FEED</h2>
               </div>
               <div class="terminal-status"><span class="status-light"></span> INPUT READY</div>
             </div>
@@ -131,23 +131,14 @@
               <div class="terminal-line dim"><span class="terminal-time">00:00:00</span> <span>phantomagic kernel online :: awaiting keystrokes</span></div>
               <div class="terminal-line dim"><span class="terminal-time">00:00:00</span> <span>tip: type anything. the movies lied, but the numbers are real.</span></div>
             </div>
-            <form class="terminal-form" id="terminalForm" autocomplete="off">
-              <label class="terminal-prompt" for="terminalInput">guest@phantomagic:~$</label>
-              <input
-                id="terminalInput"
-                name="command"
-                type="text"
-                spellcheck="false"
-                autocapitalize="off"
-                autocomplete="off"
-                aria-label="Type fake terminal commands or mash the keyboard"
-                placeholder="type different keys to feed node 01..."
-              />
-              <button class="sr-only" type="submit">Submit command</button>
-            </form>
+            <div class="terminal-note-row" aria-label="Recent keyboard note buffer">
+              <span class="terminal-prompt">note://</span>
+              <span class="note-buffer-label">BUFFER</span>
+              <span class="note-buffer" id="noteBuffer">awaiting global input...</span>
+              <span class="note-buffer-count" id="noteBufferCount">00/96</span>
+            </div>
           </section>
 
-          <div class="code-stream" id="codeStream" aria-hidden="true"></div>
         </section>
 
         <aside class="sidebar" aria-labelledby="upgradesHeading">
