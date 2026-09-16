@@ -10,6 +10,7 @@ import {
   formatDuration,
   getAutoRate,
   getGlobalOutputMultiplier,
+  getLogScrubberMultiplier,
   getManualRate,
   getOfflineCapSeconds,
   getOfflineMultiplier,
@@ -78,6 +79,19 @@ test("new powerups scale their matching systems", () => {
   assert.ok(getAutoRate(powered) > getAutoRate({ ...powered, packetMirrorLevel: 0 }));
   assert.ok(getRelayRate(powered) > 0);
   assert.ok(getManualRate(powered) > getManualRate(base));
+});
+
+test("log scrubber improves autonomous throughput while trimming terminal noise", () => {
+  const state = {
+    ...createDefaultState(),
+    autohackerLevel: 1,
+    botnetRelayLevel: 1,
+    logScrubberLevel: 2,
+  };
+
+  assert.equal(getLogScrubberMultiplier(state), 1.1);
+  assert.ok(Math.abs(getAutoRate(state) - 0.1705) < 1e-12);
+  assert.equal(getTerminalLineLimit(state), 54);
 });
 
 test("offline powerups expand both the cap and the stored output", () => {

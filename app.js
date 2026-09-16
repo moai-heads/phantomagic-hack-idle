@@ -10,6 +10,7 @@ import {
   getAutohackerRate,
   getGlobalOutputMultiplier,
   getManualRate,
+  getLogScrubberMultiplier,
   getOfflineCapSeconds,
   getPortScannerBonusRate,
   getRelayRate,
@@ -412,7 +413,7 @@ function getUpgradeEffectText(upgradeId, level) {
     case "rootAccess":
       return `+${(getGlobalOutputMultiplier(state) - 1) * 100}% all output`;
     case "logScrubber":
-      return `${getTerminalLineLimit(state)} buffered lines`;
+      return `+${((getLogScrubberMultiplier(state) - 1) * 100).toFixed(0)}% auto output // ${getTerminalLineLimit(state)} lines`;
     case "botnetRelay":
       return `+${getRelayRate(state).toFixed(2)} relay HPS`;
     case "blackIceBypass":

@@ -115,8 +115,8 @@ export const UPGRADE_CONFIG = Object.freeze({
   logScrubber: Object.freeze({
     stateKey: "logScrubberLevel",
     label: "LOG SCRUBBER",
-    description: "compresses the terminal stream into clean noise",
-    baseEffect: "-5 buffered lines / level",
+    description: "compresses terminal noise to free autonomous cycles",
+    baseEffect: "+5% autonomous output / level; trims the buffer",
     baseCost: 280,
     costMultiplier: 1.95,
     maxLevel: 8,
@@ -196,6 +196,10 @@ export function getGlobalOutputMultiplier(state) {
   return 1 + getUpgradeLevel(state, "rootAccess") * 0.2;
 }
 
+export function getLogScrubberMultiplier(state) {
+  return 1 + getUpgradeLevel(state, "logScrubber") * 0.05;
+}
+
 export function getKeySequenceMultiplier(state, combo = 0) {
   const safeCombo = Math.min(12, Math.max(0, Number(combo) || 0));
   return 1 + safeCombo * getUpgradeLevel(state, "keySequence") * 0.015;
@@ -210,18 +214,26 @@ export function getAutohackerRate(state, { processForkActive = false } = {}) {
   const amplifierMultiplier = 1 + getUpgradeLevel(state, "amplifier") * 0.12;
   const mirrorMultiplier = 1 + getUpgradeLevel(state, "packetMirror") * 0.2;
   const rootMultiplier = getGlobalOutputMultiplier(state);
-  const baseRate = getUpgradeLevel(state, "autohacker") * 0.1 * amplifierMultiplier * mirrorMultiplier;
+  const scrubberMultiplier = getLogScrubberMultiplier(state);
+  const baseRate = getUpgradeLevel(state, "autohacker") * 0.1 * amplifierMultiplier * mirrorMultiplier * scrubberMultiplier;
   return baseRate * (processForkActive ? 2 : 1) * rootMultiplier;
 }
 
 export function getRelayRate(state) {
   const amplifierMultiplier = 1 + getUpgradeLevel(state, "amplifier") * 0.04;
-  return getUpgradeLevel(state, "botnetRelay") * 0.055 * amplifierMultiplier * getGlobalOutputMultiplier(state);
+  return getUpgradeLevel(state, "botnetRelay")
+    * 0.055
+    * amplifierMultiplier
+    * getLogScrubberMultiplier(state)
+    * getGlobalOutputMultiplier(state);
 }
 
 export function getPortScannerBonusRate(state, { portScannerActive = false } = {}) {
   if (!portScannerActive) return 0;
-  return getUpgradeLevel(state, "portScanner") * 0.15 * getGlobalOutputMultiplier(state);
+  return getUpgradeLevel(state, "portScanner")
+    * 0.15
+    * getLogScrubberMultiplier(state)
+    * getGlobalOutputMultiplier(state);
 }
 
 export function getAutoRate(state, { processForkActive = false, portScannerActive = false } = {}) {
@@ -295,6 +307,8 @@ export function applyOfflineProgress(state, elapsedSeconds) {
     autoProgress: autoProgress - autoEarned,
     relayProgress: relayProgress - relayEarned,
     offlineSeconds: safeElapsed,
+    offlineAutoGain: autoEarned,
+    offlineRelayGain: relayEarned,
     offlineGain: earned,
   };
 }
