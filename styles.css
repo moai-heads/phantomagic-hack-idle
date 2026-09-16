@@ -1121,6 +1121,10 @@ h2 {
   .diagram-wrap {
     min-height: 0;
   }
+
+  .node-core {
+    width: clamp(88px, min(13vw, 17vh), 164px);
+  }
 }
 
 @media (min-width: 981px) and (max-width: 1350px) {
@@ -1192,6 +1196,54 @@ h2 {
 
   .metric strong {
     font-size: 13px;
+  }
+}
+
+@media (min-width: 981px) and (max-height: 680px) {
+  .panel-heading {
+    min-height: 48px;
+    padding: 10px 12px 8px;
+  }
+
+  .diagram-wrap {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .node-card {
+    gap: 6px;
+  }
+
+  .node-heading {
+    font-size: 8px;
+  }
+
+  .node-footer {
+    font-size: 7px;
+  }
+
+  .node-readout {
+    gap: 8px;
+    padding: 6px 12px;
+    font-size: 8px;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  .readout-key {
+    margin-right: 4px;
+  }
+
+  .terminal-heading {
+    min-height: 45px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .terminal-note-row {
+    min-height: 34px;
+    padding-right: 12px;
+    padding-left: 12px;
   }
 }
 
