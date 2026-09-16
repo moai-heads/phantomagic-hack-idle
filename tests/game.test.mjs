@@ -5,6 +5,7 @@ import {
   UPGRADE_CONFIG,
   UPGRADE_IDS,
   applyOfflineProgress,
+  areUpgradePrerequisitesMet,
   buyUpgrade,
   createDefaultState,
   formatDuration,
@@ -19,6 +20,7 @@ import {
   getTerminalLineLimit,
   getUpgradeCost,
   getUpgradeLevel,
+  getVisibleUpgradeIds,
   getZeroDayChance,
   getZeroDayReward,
   isUpgradeUnlocked,
@@ -122,14 +124,39 @@ test("milestone, exploit, and scrubber rules expose predictable values", () => {
   assert.equal(getTerminalLineLimit(state), 39);
 });
 
+test("upgrade tree reveals keyboard and automation branches from their parent nodes", () => {
+  const base = createDefaultState();
+  assert.deepEqual(getVisibleUpgradeIds(base), ["amplifier", "autohacker"]);
+
+  const keyboard = { ...base, amplifierLevel: 1 };
+  assert.equal(areUpgradePrerequisitesMet(keyboard, "syntaxBurst"), true);
+  assert.equal(areUpgradePrerequisitesMet(keyboard, "keySequence"), false);
+
+  const automation = { ...base, autohackerLevel: 1 };
+  assert.equal(areUpgradePrerequisitesMet(automation, "ghostProxy"), true);
+  assert.equal(areUpgradePrerequisitesMet(automation, "packetMirror"), true);
+  assert.equal(areUpgradePrerequisitesMet(automation, "processFork"), false);
+  assert.deepEqual(getVisibleUpgradeIds(automation), [
+    "amplifier",
+    "autohacker",
+    "packetMirror",
+    "ghostProxy",
+  ]);
+});
+
 test("future upgrades unlock from lifetime hacks and cannot be bought early", () => {
   const state = { ...createDefaultState(), hacks: 9999, totalHacks: 0 };
   assert.equal(isUpgradeUnlocked(state, "packetMirror"), false);
-  const locked = buyUpgrade(state, "packetMirror");
-  assert.equal(locked.ok, false);
-  assert.equal(locked.reason, "locked");
+  const prerequisiteLocked = buyUpgrade(state, "packetMirror");
+  assert.equal(prerequisiteLocked.ok, false);
+  assert.equal(prerequisiteLocked.reason, "prerequisite");
 
-  const unlocked = { ...state, totalHacks: UPGRADE_CONFIG.packetMirror.unlockAt };
+  const thresholdLockedState = { ...state, autohackerLevel: 1 };
+  const thresholdLocked = buyUpgrade(thresholdLockedState, "packetMirror");
+  assert.equal(thresholdLocked.ok, false);
+  assert.equal(thresholdLocked.reason, "locked");
+
+  const unlocked = { ...thresholdLockedState, totalHacks: UPGRADE_CONFIG.packetMirror.unlockAt };
   assert.equal(isUpgradeUnlocked(unlocked, "packetMirror"), true);
   assert.equal(buyUpgrade(unlocked, "packetMirror").ok, true);
 });

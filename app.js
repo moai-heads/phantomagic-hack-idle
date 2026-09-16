@@ -18,6 +18,7 @@ import {
   getTerminalLineLimit,
   getUpgradeCost,
   getUpgradeLevel,
+  getVisibleUpgradeIds,
   getZeroDayChance,
   getZeroDayReward,
   isUpgradeUnlocked,
@@ -380,10 +381,10 @@ function renderUpgradeCards() {
   elements.upgradeList.replaceChildren();
   const hint = document.createElement("div");
   hint.className = "upgrade-list-hint";
-  hint.textContent = "BUY TIERS WITH BANKED HACKS // NEW SYSTEMS UNLOCK FROM LIFETIME OUTPUT";
+  hint.textContent = "BUY TIERS WITH BANKED HACKS // NEW SYSTEMS REVEAL WHEN THEIR PARENT NODES ARE ONLINE";
   elements.upgradeList.append(hint);
   upgradeElements.clear();
-  for (const upgradeId of UPGRADE_IDS) createUpgradeElement(upgradeId);
+  for (const upgradeId of getVisibleUpgradeIds(state)) createUpgradeElement(upgradeId);
 }
 
 function getUpgradeEffectText(upgradeId, level) {
@@ -424,10 +425,11 @@ function getUpgradeEffectText(upgradeId, level) {
 }
 
 function updateUpgradeView() {
-  const activeCount = UPGRADE_IDS.filter((upgradeId) => getUpgradeLevel(state, upgradeId) > 0).length;
-  elements.upgradeCount.textContent = `${String(activeCount).padStart(2, "0")}/${String(UPGRADE_IDS.length).padStart(2, "0")}`;
+  const visibleUpgradeIds = getVisibleUpgradeIds(state);
+  const activeCount = visibleUpgradeIds.filter((upgradeId) => getUpgradeLevel(state, upgradeId) > 0).length;
+  elements.upgradeCount.textContent = `${String(activeCount).padStart(2, "0")}/${String(visibleUpgradeIds.length).padStart(2, "0")}`;
 
-  for (const upgradeId of UPGRADE_IDS) {
+  for (const upgradeId of visibleUpgradeIds) {
     const config = UPGRADE_CONFIG[upgradeId];
     const upgradeView = upgradeElements.get(upgradeId);
     const level = getUpgradeLevel(state, upgradeId);
@@ -634,7 +636,9 @@ function handleUpgrade(upgradeId) {
   const result = buyUpgrade(state, upgradeId);
   const config = UPGRADE_CONFIG[upgradeId];
   if (!result.ok) {
-    if (result.reason === "locked") {
+    if (result.reason === "prerequisite") {
+      showToast("LOCKED // PARENT NODE OFFLINE");
+    } else if (result.reason === "locked") {
       const remaining = Math.max(0, result.unlockAt - state.totalHacks);
       showToast(`LOCKED // NEED ${remaining} MORE LIFETIME HACKS`);
     } else if (result.reason === "insufficient") {
@@ -661,6 +665,7 @@ function handleUpgrade(upgradeId) {
     showToast(`${config.label} UPGRADED // LV ${result.level}`);
   }
 
+  renderUpgradeCards();
   updateView(performance.now());
   saveState();
 }
@@ -677,8 +682,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") saveState();
 });
 
-renderUpgradeCards();
 state = loadState();
+renderUpgradeCards();
 updateNoteBuffer();
 updateView(performance.now());
 window.requestAnimationFrame(gameLoop);

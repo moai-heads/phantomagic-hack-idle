@@ -11,6 +11,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 1.82,
     maxLevel: 12,
     unlockAt: 0,
+    prerequisites: Object.freeze([]),
   }),
   autohacker: Object.freeze({
     stateKey: "autohackerLevel",
@@ -21,6 +22,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 1.72,
     maxLevel: 12,
     unlockAt: 0,
+    prerequisites: Object.freeze([]),
   }),
   packetMirror: Object.freeze({
     stateKey: "packetMirrorLevel",
@@ -31,6 +33,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 1.95,
     maxLevel: 8,
     unlockAt: 25,
+    prerequisites: Object.freeze([{ upgradeId: "autohacker", level: 1 }]),
   }),
   ghostProxy: Object.freeze({
     stateKey: "ghostProxyLevel",
@@ -41,6 +44,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 1.95,
     maxLevel: 8,
     unlockAt: 50,
+    prerequisites: Object.freeze([{ upgradeId: "autohacker", level: 1 }]),
   }),
   syntaxBurst: Object.freeze({
     stateKey: "syntaxBurstLevel",
@@ -51,6 +55,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2,
     maxLevel: 8,
     unlockAt: 75,
+    prerequisites: Object.freeze([{ upgradeId: "amplifier", level: 1 }]),
   }),
   keySequence: Object.freeze({
     stateKey: "keySequenceLevel",
@@ -61,6 +66,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2,
     maxLevel: 8,
     unlockAt: 120,
+    prerequisites: Object.freeze([{ upgradeId: "amplifier", level: 2 }]),
   }),
   processFork: Object.freeze({
     stateKey: "processForkLevel",
@@ -71,6 +77,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2,
     maxLevel: 6,
     unlockAt: 180,
+    prerequisites: Object.freeze([{ upgradeId: "autohacker", level: 2 }]),
   }),
   terminalCache: Object.freeze({
     stateKey: "terminalCacheLevel",
@@ -81,6 +88,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2,
     maxLevel: 8,
     unlockAt: 250,
+    prerequisites: Object.freeze([{ upgradeId: "ghostProxy", level: 1 }]),
   }),
   zeroDay: Object.freeze({
     stateKey: "zeroDayLevel",
@@ -91,6 +99,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2.08,
     maxLevel: 8,
     unlockAt: 400,
+    prerequisites: Object.freeze([{ upgradeId: "syntaxBurst", level: 1 }]),
   }),
   portScanner: Object.freeze({
     stateKey: "portScannerLevel",
@@ -101,6 +110,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2.1,
     maxLevel: 6,
     unlockAt: 600,
+    prerequisites: Object.freeze([{ upgradeId: "autohacker", level: 3 }]),
   }),
   rootAccess: Object.freeze({
     stateKey: "rootAccessLevel",
@@ -111,6 +121,11 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2.55,
     maxLevel: 5,
     unlockAt: 1000,
+    prerequisites: Object.freeze([
+      { upgradeId: "packetMirror", level: 1 },
+      { upgradeId: "keySequence", level: 1 },
+      { upgradeId: "ghostProxy", level: 1 },
+    ]),
   }),
   logScrubber: Object.freeze({
     stateKey: "logScrubberLevel",
@@ -121,6 +136,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 1.95,
     maxLevel: 8,
     unlockAt: 1500,
+    prerequisites: Object.freeze([{ upgradeId: "autohacker", level: 2 }]),
   }),
   botnetRelay: Object.freeze({
     stateKey: "botnetRelayLevel",
@@ -131,6 +147,10 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2.15,
     maxLevel: 8,
     unlockAt: 2500,
+    prerequisites: Object.freeze([
+      { upgradeId: "autohacker", level: 3 },
+      { upgradeId: "packetMirror", level: 1 },
+    ]),
   }),
   blackIceBypass: Object.freeze({
     stateKey: "blackIceBypassLevel",
@@ -141,6 +161,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     costMultiplier: 2.2,
     maxLevel: 5,
     unlockAt: 4000,
+    prerequisites: Object.freeze([{ upgradeId: "botnetRelay", level: 1 }]),
   }),
 });
 
@@ -180,9 +201,21 @@ export function getUpgradeLevel(state, upgradeId) {
   return Math.max(0, Number(state?.[config.stateKey]) || 0);
 }
 
-export function isUpgradeUnlocked(state, upgradeId) {
+export function areUpgradePrerequisitesMet(state, upgradeId) {
   const config = UPGRADE_CONFIG[upgradeId];
   if (!config) return false;
+  return (config.prerequisites || []).every(({ upgradeId: prerequisiteId, level }) => (
+    getUpgradeLevel(state, prerequisiteId) >= level
+  ));
+}
+
+export function getVisibleUpgradeIds(state) {
+  return UPGRADE_IDS.filter((upgradeId) => areUpgradePrerequisitesMet(state, upgradeId));
+}
+
+export function isUpgradeUnlocked(state, upgradeId) {
+  const config = UPGRADE_CONFIG[upgradeId];
+  if (!config || !areUpgradePrerequisitesMet(state, upgradeId)) return false;
   return (Number(state?.totalHacks) || 0) >= config.unlockAt;
 }
 
@@ -275,6 +308,9 @@ export function buyUpgrade(state, upgradeId) {
   const currentLevel = getUpgradeLevel(state, upgradeId);
   const cost = getUpgradeCost(upgradeId, currentLevel);
 
+  if (!areUpgradePrerequisitesMet(state, upgradeId)) {
+    return { ok: false, state, cost, reason: "prerequisite", prerequisites: config.prerequisites };
+  }
   if (!isUpgradeUnlocked(state, upgradeId)) {
     return { ok: false, state, cost, reason: "locked", unlockAt: config.unlockAt };
   }

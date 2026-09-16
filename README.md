@@ -2,7 +2,7 @@
 
 A tiny terminal idle game for people who enjoy the look of movie hacking montages.
 
-Type anywhere while the game window is active to feed the manual node. The terminal auto-scrolls a fake line for every key and keeps a count of recent input in a note buffer without printing the raw keys. The manual node mints one hack every two seconds at base speed; repeated keys are allowed. The HUD shows both banked hacks and the all-time total completed. Spend hacks on 14 upgrade systems, including autonomous nodes, combo chains, timed scans, exploits, offline storage, firewall protection, and a log scrubber that both trims terminal noise and boosts autonomous output by 5% per level. Your progress is saved locally in the browser.
+Type anywhere while the game window is active to feed the manual node. The terminal auto-scrolls a fake line for every key and keeps a count of recent input in a note buffer without printing the raw keys. The manual node mints one hack every two seconds at base speed; repeated keys are allowed. The HUD shows both banked hacks and the all-time total completed. Spend hacks on 14 upgrade systems, including autonomous nodes, combo chains, timed scans, exploits, offline storage, firewall protection, and a log scrubber that both trims terminal noise and boosts autonomous output by 5% per level. The upgrade deck reveals dependent systems as their parent upgrades come online: the keyboard branch starts with Keystroke Amplifier, while the automation branch starts with Autohacker and then reveals passive/offline systems. Your progress is saved locally in the browser.
 
 ## Run locally
 
@@ -18,7 +18,7 @@ Open <http://localhost:4173>.
 - Watch the terminal auto-scroll fake code and command lines.
 - The note buffer keeps the most recent keyboard input.
 - Click an available upgrade card to buy it.
-- Locked upgrades unlock as your lifetime hack total grows; the sidebar explains each effect.
+- Upgrade cards only appear after their prerequisite parent nodes are installed; lifetime hack thresholds still gate purchases, and the sidebar explains each effect.
 - Open the `INFINITE MODE` blueprint panel for the planned prestige loop.
 
 ## Project shape
