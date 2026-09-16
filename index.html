@@ -9,7 +9,7 @@
       content="PHANTOMAGIC is a monochrome terminal idle game about typing, hacking, and upgrading autonomous nodes."
     />
     <title>PHANTOMAGIC // HACK IDLE</title>
-    <link rel="stylesheet" href="styles.css?v=firefox-20260915" />
+    <link rel="stylesheet" href="styles.css?v=powerups-20260916" />
   </head>
   <body>
     <div class="app-shell" id="appShell" tabindex="-1">
@@ -71,7 +71,7 @@
                 <div class="eyebrow">NETWORK TOPOLOGY</div>
                 <h1 id="networkHeading">LIVE ACCESS NODES</h1>
               </div>
-              <div class="panel-index">GRID 01 / 02</div>
+              <div class="panel-index">GRID 01 / 03</div>
             </div>
 
             <div class="diagram-wrap">
@@ -117,6 +117,30 @@
                     <span id="autoCycleText">LOCKED</span>
                   </div>
                 </article>
+
+                <div class="node-connector secondary-connector" aria-hidden="true">
+                  <span class="connector-line"></span>
+                  <span class="connector-pulse"></span>
+                  <span class="connector-label">RELAY BUS</span>
+                </div>
+
+                <article class="node-card relay-node locked" id="relayNode">
+                  <div class="node-heading">
+                    <span class="node-tag">NODE 03</span>
+                    <span class="node-state" id="relayNodeState">OFFLINE</span>
+                  </div>
+                  <div class="node-core" id="relayCore" aria-label="Botnet relay charge">
+                    <div class="core-grid" aria-hidden="true"></div>
+                    <div class="core-fill" id="relayFill"></div>
+                    <div class="core-scan" aria-hidden="true"></div>
+                    <span class="node-percent" id="relayPercent">--</span>
+                    <span class="node-glyph" aria-hidden="true">⌘</span>
+                  </div>
+                  <div class="node-footer">
+                    <span id="relayNodeDetail">AWAITING PURCHASE</span>
+                    <span id="relayCycleText">LOCKED</span>
+                  </div>
+                </article>
               </div>
             </div>
 
@@ -159,53 +183,7 @@
           <div class="sidebar-rule"></div>
 
           <section class="upgrade-list" id="upgradeList" aria-label="Available upgrades">
-            <button class="upgrade-card" type="button" data-upgrade="amplifier">
-              <span class="upgrade-topline">
-                <span class="upgrade-name">KEYSTROKE AMPLIFIER</span>
-                <span class="upgrade-level" id="amplifierLevel">LV 0</span>
-              </span>
-              <span class="upgrade-description">compresses manual signal bursts</span>
-              <span class="upgrade-bottomline">
-                <span class="upgrade-effect" id="amplifierEffect">+0% manual speed</span>
-                <span class="upgrade-cost"><span class="cost-icon">◆</span><span id="amplifierCost">3</span></span>
-              </span>
-            </button>
-
-            <button class="upgrade-card" type="button" data-upgrade="autohacker">
-              <span class="upgrade-topline">
-                <span class="upgrade-name">AUTOHACKER</span>
-                <span class="upgrade-level" id="autohackerLevel">OFFLINE</span>
-              </span>
-              <span class="upgrade-description">spawns a second autonomous node</span>
-              <span class="upgrade-bottomline">
-                <span class="upgrade-effect" id="autohackerEffect">+0.00 HPS</span>
-                <span class="upgrade-cost"><span class="cost-icon">◆</span><span id="autohackerCost">6</span></span>
-              </span>
-            </button>
-
-            <button class="upgrade-card future-card" type="button" disabled>
-              <span class="upgrade-topline">
-                <span class="upgrade-name">PACKET MIRROR</span>
-                <span class="upgrade-level">LOCKED</span>
-              </span>
-              <span class="upgrade-description">duplicate the cleanest signal</span>
-              <span class="upgrade-bottomline">
-                <span class="upgrade-effect">coming in next patch</span>
-                <span class="lock-icon">▧</span>
-              </span>
-            </button>
-
-            <button class="upgrade-card future-card" type="button" disabled>
-              <span class="upgrade-topline">
-                <span class="upgrade-name">GHOST PROXY</span>
-                <span class="upgrade-level">LOCKED</span>
-              </span>
-              <span class="upgrade-description">route around the visible firewall</span>
-              <span class="upgrade-bottomline">
-                <span class="upgrade-effect">coming in next patch</span>
-                <span class="lock-icon">▧</span>
-              </span>
-            </button>
+            <div class="upgrade-list-hint">BUY TIERS WITH BANKED HACKS // NEW SYSTEMS UNLOCK FROM LIFETIME OUTPUT</div>
           </section>
 
           <section class="event-panel" aria-labelledby="eventHeading">
@@ -219,6 +197,12 @@
             </div>
           </section>
 
+          <details class="roadmap-panel">
+            <summary><span>INFINITE MODE</span><span class="roadmap-status">BLUEPRINT</span></summary>
+            <p>BREACH THE FIREWALL, RESET THE BANK, KEEP GHOST FRAGMENTS, REPEAT.</p>
+            <span class="roadmap-note">ROADMAP // SEE docs/INFINITE_MODE.md</span>
+          </details>
+
           <div class="sidebar-footer">
             <span>LOCAL SAVE ENABLED</span>
             <button id="resetButton" class="text-button" type="button">RESET SESSION</button>
@@ -227,13 +211,13 @@
       </main>
 
       <footer class="footer-bar">
-        <span>PHANTOMAGIC SYSTEMS // BUILD 0.1.0</span>
+        <span>PHANTOMAGIC SYSTEMS // BUILD 0.2.0</span>
         <span>TYPE. CHARGE. HACK.</span>
         <span id="saveStatus">LOCAL STATE SYNCED</span>
       </footer>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script type="module" src="app.js?v=firefox-20260915"></script>
+    <script type="module" src="app.js?v=powerups-20260916"></script>
   </body>
 </html>
