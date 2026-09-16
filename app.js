@@ -1,16 +1,27 @@
 import {
   SAVE_KEY,
   UPGRADE_CONFIG,
+  UPGRADE_IDS,
   applyOfflineProgress,
   buyUpgrade,
   createDefaultState,
   formatDuration,
   getAutoRate,
+  getAutohackerRate,
+  getGlobalOutputMultiplier,
   getManualRate,
+  getOfflineCapSeconds,
+  getPortScannerBonusRate,
+  getRelayRate,
+  getSyntaxBurstReward,
+  getTerminalLineLimit,
   getUpgradeCost,
   getUpgradeLevel,
+  getZeroDayChance,
+  getZeroDayReward,
+  isUpgradeUnlocked,
   normalizeState,
-} from "./game.js?v=firefox-20260915";
+} from "./game.js?v=powerups-20260916";
 
 const STREAM_TEMPLATES = Object.freeze([
   "ssh ghost@10.13.37.4 -p 443",
@@ -28,12 +39,17 @@ const STREAM_TEMPLATES = Object.freeze([
 ]);
 
 const HEX = "0123456789ABCDEF";
-const MAX_TERMINAL_LINES = 64;
 const MAX_EVENTS = 8;
 const MAX_NOTE_BUFFER = 96;
 const ACTIVE_INPUT_WINDOW = 650;
 const MANUAL_DECAY_DELAY = 1100;
 const MANUAL_DECAY_RATE = 0.12;
+const MAX_COMBO = 12;
+const PROCESS_FORK_INTERVAL_MS = 60_000;
+const PORT_SCAN_INTERVAL_MS = 48_000;
+const BLACK_ICE_INTERVAL_MS = 45_000;
+const BLACK_ICE_DURATION_MS = 6_000;
+const AUTOSAVE_INTERVAL_MS = 10_000;
 
 const elements = {
   appShell: document.querySelector("#appShell"),
@@ -54,37 +70,40 @@ const elements = {
   autoNodeState: document.querySelector("#autoNodeState"),
   autoNodeDetail: document.querySelector("#autoNodeDetail"),
   autoCycleText: document.querySelector("#autoCycleText"),
+  relayNode: document.querySelector("#relayNode"),
+  relayFill: document.querySelector("#relayFill"),
+  relayPercent: document.querySelector("#relayPercent"),
+  relayNodeState: document.querySelector("#relayNodeState"),
+  relayNodeDetail: document.querySelector("#relayNodeDetail"),
+  relayCycleText: document.querySelector("#relayCycleText"),
   terminalScreen: document.querySelector("#terminalScreen"),
   noteBuffer: document.querySelector("#noteBuffer"),
   noteBufferCount: document.querySelector("#noteBufferCount"),
   eventLog: document.querySelector("#eventLog"),
+  upgradeList: document.querySelector("#upgradeList"),
   upgradeCount: document.querySelector("#upgradeCount"),
   saveStatus: document.querySelector("#saveStatus"),
   toast: document.querySelector("#toast"),
   resetButton: document.querySelector("#resetButton"),
 };
 
-const upgradeElements = {
-  amplifier: {
-    button: document.querySelector('[data-upgrade="amplifier"]'),
-    level: document.querySelector("#amplifierLevel"),
-    effect: document.querySelector("#amplifierEffect"),
-    cost: document.querySelector("#amplifierCost"),
-  },
-  autohacker: {
-    button: document.querySelector('[data-upgrade="autohacker"]'),
-    level: document.querySelector("#autohackerLevel"),
-    effect: document.querySelector("#autohackerEffect"),
-    cost: document.querySelector("#autohackerCost"),
-  },
-};
-
-let state = loadState();
-let lastFrame = performance.now();
+const upgradeElements = new Map();
+const initialNow = performance.now();
+let state;
+let lastFrame = initialNow;
+let lastAutosaveAt = Date.now();
 let lastInputAt = 0;
+let lastTypedKey = "";
+let comboCount = 0;
 let noteBuffer = "";
 let noteBufferLine = "";
 let lastTemplateIndex = -1;
+let processForkUntil = 0;
+let nextProcessForkAt = initialNow + PROCESS_FORK_INTERVAL_MS;
+let portScannerUntil = 0;
+let nextPortScannerAt = initialNow + PORT_SCAN_INTERVAL_MS;
+let blackIceUntil = 0;
+let nextBlackIceAt = initialNow + BLACK_ICE_INTERVAL_MS;
 let toastTimeout;
 
 function loadState() {
@@ -111,6 +130,7 @@ function loadState() {
 
 function saveState() {
   state.lastSavedAt = Date.now();
+  lastAutosaveAt = state.lastSavedAt;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
     elements.saveStatus.textContent = `STATE SYNCED ${new Date(state.lastSavedAt).toLocaleTimeString([], { hour12: false })}`;
@@ -119,12 +139,24 @@ function saveState() {
   }
 }
 
+function resetTimedSystems(now = performance.now()) {
+  processForkUntil = 0;
+  nextProcessForkAt = now + PROCESS_FORK_INTERVAL_MS;
+  portScannerUntil = 0;
+  nextPortScannerAt = now + PORT_SCAN_INTERVAL_MS;
+  blackIceUntil = 0;
+  nextBlackIceAt = now + BLACK_ICE_INTERVAL_MS;
+}
+
 function resetState() {
   state = createDefaultState(Date.now());
   lastInputAt = 0;
+  lastTypedKey = "";
+  comboCount = 0;
   noteBuffer = "";
   noteBufferLine = "";
   lastTemplateIndex = -1;
+  resetTimedSystems();
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
@@ -192,7 +224,7 @@ function appendTerminal(kind, text) {
   line.append(timestamp, message);
   elements.terminalScreen.append(line);
 
-  while (elements.terminalScreen.children.length > MAX_TERMINAL_LINES) {
+  while (elements.terminalScreen.children.length > getTerminalLineLimit(state)) {
     elements.terminalScreen.firstElementChild?.remove();
   }
   elements.terminalScreen.scrollTop = elements.terminalScreen.scrollHeight;
@@ -223,14 +255,58 @@ function showToast(message) {
   toastTimeout = window.setTimeout(() => elements.toast.classList.remove("visible"), 2300);
 }
 
+function updateCombo(key, now) {
+  const normalizedKey = key.length === 1 ? key.toLowerCase() : key;
+  const recentInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
+
+  if (!recentInput) {
+    comboCount = 1;
+  } else if (normalizedKey === lastTypedKey) {
+    comboCount = 0;
+  } else {
+    comboCount = Math.min(MAX_COMBO, comboCount + 1);
+  }
+
+  lastTypedKey = normalizedKey;
+}
+
+function earnHacks(amount, reason = "manual node", applyOutputMultiplier = false) {
+  const rawAmount = Math.max(0, Number(amount) || 0);
+  const multiplier = applyOutputMultiplier ? getGlobalOutputMultiplier(state) : 1;
+  const minted = Math.floor(rawAmount * multiplier);
+  if (minted <= 0) return;
+
+  state.hacks += minted;
+  state.totalHacks += minted;
+  state.totalManualMints += reason === "manual node" ? minted : 0;
+  appendTerminal("output", `${reason} :: +${minted} hack${minted === 1 ? "" : "s"} minted`);
+  addEvent(`${reason} minted +${minted} hack${minted === 1 ? "" : "s"}`);
+
+  if (reason === "manual node" || reason.includes("burst") || reason.includes("exploit")) {
+    showToast(`HACK MINTED // +${minted}`);
+  }
+}
+
 function recordKey(key) {
-  lastInputAt = performance.now();
+  const now = performance.now();
+  updateCombo(key, now);
+  lastInputAt = now;
   state.totalTyped += 1;
   updateNoteBufferWithKey(key);
 
   const fakeCommand = fakeLineFromInput();
   updateNoteBuffer(fakeCommand);
   appendTerminal("output", `${fakeCommand}  :: packet ${randomHex(4)}`);
+
+  const syntaxReward = getSyntaxBurstReward(state);
+  if (syntaxReward > 0 && state.totalTyped % 25 === 0) {
+    earnHacks(syntaxReward, "syntax burst", true);
+  }
+
+  const zeroDayReward = getZeroDayReward(state);
+  if (zeroDayReward > 0 && Math.random() < getZeroDayChance(state)) {
+    earnHacks(zeroDayReward, "zero-day exploit", true);
+  }
 }
 
 function handleGlobalKey(event) {
@@ -257,58 +333,167 @@ function handlePaste(event) {
   }
 }
 
-function earnHacks(amount, reason = "manual node") {
-  if (!amount) return;
-  state.hacks += amount;
-  state.totalHacks += amount;
-  state.totalManualMints += reason === "manual node" ? amount : 0;
-  appendTerminal("output", `${reason} :: +${amount} hack${amount === 1 ? "" : "s"} minted`);
-  addEvent(`${reason} minted +${amount} hack${amount === 1 ? "" : "s"}`);
-  showToast(`HACK MINTED // +${amount}`);
+function createUpgradeElement(upgradeId) {
+  const config = UPGRADE_CONFIG[upgradeId];
+  const button = document.createElement("button");
+  button.className = "upgrade-card locked-card";
+  button.type = "button";
+  button.dataset.upgrade = upgradeId;
+
+  const topline = document.createElement("span");
+  topline.className = "upgrade-topline";
+  const name = document.createElement("span");
+  name.className = "upgrade-name";
+  name.textContent = config.label;
+  const level = document.createElement("span");
+  level.className = "upgrade-level";
+  topline.append(name, level);
+
+  const description = document.createElement("span");
+  description.className = "upgrade-description";
+  description.textContent = config.description;
+
+  const bottomline = document.createElement("span");
+  bottomline.className = "upgrade-bottomline";
+  const effect = document.createElement("span");
+  effect.className = "upgrade-effect";
+  const cost = document.createElement("span");
+  cost.className = "upgrade-cost";
+  const costIcon = document.createElement("span");
+  costIcon.className = "cost-icon";
+  costIcon.textContent = "◆";
+  const costValue = document.createElement("span");
+  cost.append(costIcon, costValue);
+  bottomline.append(effect, cost);
+
+  const unlock = document.createElement("span");
+  unlock.className = "upgrade-unlock";
+
+  button.append(topline, description, bottomline, unlock);
+  button.addEventListener("click", () => handleUpgrade(upgradeId));
+  elements.upgradeList.append(button);
+  upgradeElements.set(upgradeId, { button, level, effect, cost: costValue, unlock });
+}
+
+function renderUpgradeCards() {
+  elements.upgradeList.replaceChildren();
+  const hint = document.createElement("div");
+  hint.className = "upgrade-list-hint";
+  hint.textContent = "BUY TIERS WITH BANKED HACKS // NEW SYSTEMS UNLOCK FROM LIFETIME OUTPUT";
+  elements.upgradeList.append(hint);
+  upgradeElements.clear();
+  for (const upgradeId of UPGRADE_IDS) createUpgradeElement(upgradeId);
+}
+
+function getUpgradeEffectText(upgradeId, level) {
+  if (!level) return UPGRADE_CONFIG[upgradeId].baseEffect;
+
+  switch (upgradeId) {
+    case "amplifier":
+      return `+${level * 15}% manual speed`;
+    case "autohacker":
+      return `+${getAutohackerRate(state).toFixed(2)} HPS`;
+    case "packetMirror":
+      return `+${level * 20}% autohacker output`;
+    case "ghostProxy":
+      return `+${level * 25}% offline output`;
+    case "syntaxBurst":
+      return `+${getSyntaxBurstReward(state)} hacks / 25 keys`;
+    case "keySequence":
+      return `+${(level * 1.5).toFixed(1)}% / combo step`;
+    case "processFork":
+      return `+${level * 15}s fork window`;
+    case "terminalCache":
+      return `+${level * 2}h offline cap`;
+    case "zeroDay":
+      return `${(getZeroDayChance(state) * 100).toFixed(1)}% for +${getZeroDayReward(state)}`;
+    case "portScanner":
+      return `+${(level * 0.15).toFixed(2)} HPS during scans`;
+    case "rootAccess":
+      return `+${(getGlobalOutputMultiplier(state) - 1) * 100}% all output`;
+    case "logScrubber":
+      return `${getTerminalLineLimit(state)} buffered lines`;
+    case "botnetRelay":
+      return `+${getRelayRate(state).toFixed(2)} relay HPS`;
+    case "blackIceBypass":
+      return `${Math.min(100, level * 20)}% block chance`;
+    default:
+      return UPGRADE_CONFIG[upgradeId].baseEffect;
+  }
 }
 
 function updateUpgradeView() {
-  const amplifierLevel = getUpgradeLevel(state, "amplifier");
-  const autohackerLevel = getUpgradeLevel(state, "autohacker");
-  const amplifierCost = getUpgradeCost("amplifier", amplifierLevel);
-  const autohackerCost = getUpgradeCost("autohacker", autohackerLevel);
-  const autoRate = getAutoRate(state);
-  const activeCount = Number(amplifierLevel > 0) + Number(autohackerLevel > 0);
+  const activeCount = UPGRADE_IDS.filter((upgradeId) => getUpgradeLevel(state, upgradeId) > 0).length;
+  elements.upgradeCount.textContent = `${String(activeCount).padStart(2, "0")}/${String(UPGRADE_IDS.length).padStart(2, "0")}`;
 
-  elements.upgradeCount.textContent = `${String(activeCount).padStart(2, "0")}/04`;
-
-  upgradeElements.amplifier.level.textContent = amplifierLevel >= UPGRADE_CONFIG.amplifier.maxLevel ? "MAX" : `LV ${amplifierLevel}`;
-  upgradeElements.amplifier.effect.textContent = `+${amplifierLevel * 15}% manual speed`;
-  upgradeElements.amplifier.cost.textContent = Number.isFinite(amplifierCost) ? amplifierCost : "MAX";
-
-  upgradeElements.autohacker.level.textContent = autohackerLevel ? `LV ${autohackerLevel}` : "OFFLINE";
-  upgradeElements.autohacker.effect.textContent = `+${autoRate.toFixed(2)} HPS`;
-  upgradeElements.autohacker.cost.textContent = Number.isFinite(autohackerCost) ? autohackerCost : "MAX";
-
-  for (const [upgradeId, upgradeView] of Object.entries(upgradeElements)) {
+  for (const upgradeId of UPGRADE_IDS) {
+    const config = UPGRADE_CONFIG[upgradeId];
+    const upgradeView = upgradeElements.get(upgradeId);
     const level = getUpgradeLevel(state, upgradeId);
     const cost = getUpgradeCost(upgradeId, level);
-    const canBuy = Number.isFinite(cost) && state.hacks >= cost;
+    const unlocked = isUpgradeUnlocked(state, upgradeId);
+    const canBuy = unlocked && Number.isFinite(cost) && state.hacks >= cost;
+
+    upgradeView.level.textContent = !unlocked
+      ? `LOCK ${formatHacks(config.unlockAt)}`
+      : level >= config.maxLevel
+        ? "MAX"
+        : `LV ${level}`;
+    upgradeView.effect.textContent = getUpgradeEffectText(upgradeId, level);
+    upgradeView.cost.textContent = unlocked && Number.isFinite(cost) ? cost : "--";
+    upgradeView.unlock.textContent = unlocked
+      ? level >= config.maxLevel
+        ? "FULLY INSTALLED"
+        : "CLICK TO INSTALL NEXT TIER"
+      : `UNLOCK AT ${formatHacks(config.unlockAt)} TOTAL HACKS`;
+
+    upgradeView.button.disabled = !unlocked || !Number.isFinite(cost);
+    upgradeView.button.classList.toggle("locked-card", !unlocked);
     upgradeView.button.classList.toggle("can-buy", canBuy);
-    upgradeView.button.classList.toggle("cannot-buy", !canBuy && Number.isFinite(cost));
-    upgradeView.button.disabled = !Number.isFinite(cost);
+    upgradeView.button.classList.toggle("cannot-buy", unlocked && !canBuy && Number.isFinite(cost));
     upgradeView.button.setAttribute(
       "aria-label",
-      `${upgradeId} level ${level}, costs ${Number.isFinite(cost) ? cost : "maximum level"} hacks`,
+      `${config.label}, ${unlocked ? `level ${level}, costs ${Number.isFinite(cost) ? cost : "maximum level"}` : `locked until ${config.unlockAt} total hacks`}`,
     );
   }
 }
 
+function isProcessForkActive(now) {
+  return processForkUntil > now;
+}
+
+function isPortScannerActive(now) {
+  return portScannerUntil > now;
+}
+
+function isBlackIceActive(now) {
+  return blackIceUntil > now;
+}
+
 function updateNodes(now) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
+  const processForkActive = isProcessForkActive(now);
+  const portScannerActive = isPortScannerActive(now);
+  const blackIceActive = isBlackIceActive(now);
+  const manualRate = getManualRate(state, { combo: comboCount });
   const manualPercent = Math.min(99, Math.floor(state.manualProgress * 100));
+
   elements.manualFill.style.height = `${state.manualProgress * 100}%`;
   elements.manualPercent.textContent = `${String(manualPercent).padStart(2, "0")}%`;
-  elements.manualNodeState.textContent = activeInput ? "CHARGING" : state.manualProgress > 0 ? "HOLDING" : "LISTENING";
-  elements.manualCycleText.textContent = `${(1 / getManualRate(state)).toFixed(2)}s CYCLE`;
-  elements.manualCore.classList.toggle("charging", activeInput);
+  elements.manualNodeState.textContent = blackIceActive
+    ? "BLACK ICE"
+    : activeInput
+      ? comboCount > 1 && getUpgradeLevel(state, "keySequence") > 0
+        ? `COMBO X${comboCount}`
+        : "CHARGING"
+      : state.manualProgress > 0
+        ? "HOLDING"
+        : "LISTENING";
+  elements.manualCycleText.textContent = `${(1 / manualRate).toFixed(2)}s CYCLE`;
+  elements.manualCore.classList.toggle("charging", activeInput && !blackIceActive);
+  elements.manualCore.classList.toggle("disrupted", blackIceActive);
 
-  const autoOnline = state.autohackerLevel > 0;
+  const autoOnline = getUpgradeLevel(state, "autohacker") > 0;
   elements.autoNode.classList.toggle("locked", !autoOnline);
   if (!autoOnline) {
     elements.autoFill.style.height = "0%";
@@ -316,45 +501,112 @@ function updateNodes(now) {
     elements.autoNodeState.textContent = "OFFLINE";
     elements.autoNodeDetail.textContent = "AWAITING PURCHASE";
     elements.autoCycleText.textContent = "LOCKED";
-    return;
+  } else {
+    const autoRate = getAutohackerRate(state, { processForkActive })
+      + getPortScannerBonusRate(state, { portScannerActive });
+    elements.autoFill.style.height = `${state.autoProgress * 100}%`;
+    elements.autoPercent.textContent = `${String(Math.floor(state.autoProgress * 100)).padStart(2, "0")}%`;
+    elements.autoNodeState.textContent = processForkActive ? "FORKED" : `RUNNING LV ${state.autohackerLevel}`;
+    elements.autoNodeDetail.textContent = `${portScannerActive ? "SCAN // " : ""}+${autoRate.toFixed(2)} HPS`;
+    elements.autoCycleText.textContent = `${(1 / autoRate).toFixed(1)}s CYCLE`;
   }
 
-  const autoRate = getAutoRate(state);
-  elements.autoFill.style.height = `${state.autoProgress * 100}%`;
-  elements.autoPercent.textContent = `${String(Math.floor(state.autoProgress * 100)).padStart(2, "0")}%`;
-  elements.autoNodeState.textContent = `RUNNING LV ${state.autohackerLevel}`;
-  elements.autoNodeDetail.textContent = `+${autoRate.toFixed(2)} HPS`;
-  elements.autoCycleText.textContent = `${(1 / autoRate).toFixed(1)}s CYCLE`;
+  const relayOnline = getUpgradeLevel(state, "botnetRelay") > 0;
+  elements.relayNode.classList.toggle("locked", !relayOnline);
+  if (!relayOnline) {
+    elements.relayFill.style.height = "0%";
+    elements.relayPercent.textContent = "--";
+    elements.relayNodeState.textContent = "OFFLINE";
+    elements.relayNodeDetail.textContent = "AWAITING PURCHASE";
+    elements.relayCycleText.textContent = "LOCKED";
+  } else {
+    const relayRate = getRelayRate(state);
+    elements.relayFill.style.height = `${state.relayProgress * 100}%`;
+    elements.relayPercent.textContent = `${String(Math.floor(state.relayProgress * 100)).padStart(2, "0")}%`;
+    elements.relayNodeState.textContent = `RELAYING LV ${state.botnetRelayLevel}`;
+    elements.relayNodeDetail.textContent = `+${relayRate.toFixed(2)} HPS`;
+    elements.relayCycleText.textContent = `${(1 / relayRate).toFixed(1)}s CYCLE`;
+  }
 }
 
 function updateView(now = performance.now()) {
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
+  const blackIceActive = isBlackIceActive(now);
+  const autoRate = getAutoRate(state, {
+    processForkActive: isProcessForkActive(now),
+    portScannerActive: isPortScannerActive(now),
+  });
   elements.hacksCount.textContent = formatHacks(state.hacks);
   elements.totalHacksCount.textContent = formatHacks(state.totalHacks);
-  elements.hacksPerSecond.textContent = getAutoRate(state).toFixed(2);
+  elements.hacksPerSecond.textContent = autoRate.toFixed(2);
   elements.sessionTimer.textContent = formatDuration((Date.now() - state.sessionStartedAt) / 1000);
-  elements.inputState.textContent = activeInput ? "ACTIVE" : "STANDBY";
+  elements.inputState.textContent = blackIceActive ? "ICE LOCK" : activeInput ? "ACTIVE" : "STANDBY";
   elements.clockReadout.textContent = `SYS ${formatSystemClock()}`;
   updateNodes(now);
   updateUpgradeView();
 }
 
+function processTimedSystems(now) {
+  const processLevel = getUpgradeLevel(state, "processFork");
+  if (processLevel <= 0) {
+    processForkUntil = 0;
+  } else if (now >= nextProcessForkAt) {
+    processForkUntil = now + processLevel * 15_000;
+    nextProcessForkAt = now + Math.max(30_000, PROCESS_FORK_INTERVAL_MS - processLevel * 5_000);
+    appendTerminal("command", `fork --autohacker --ttl=${processLevel * 15}s`);
+    addEvent(`process fork online :: ${processLevel * 15}s autonomous double-output`);
+    showToast("PROCESS FORK // AUTONOMOUS OUTPUT DOUBLED");
+  }
+
+  const scannerLevel = getUpgradeLevel(state, "portScanner");
+  if (scannerLevel <= 0) {
+    portScannerUntil = 0;
+  } else if (now >= nextPortScannerAt) {
+    portScannerUntil = now + 18_000 + scannerLevel * 2_000;
+    nextPortScannerAt = now + Math.max(30_000, PORT_SCAN_INTERVAL_MS - scannerLevel * 3_000);
+    appendTerminal("command", `scan --ports=65535 --bonus-nodes=${scannerLevel}`);
+    addEvent(`port scanner found ${scannerLevel} temporary bonus node${scannerLevel === 1 ? "" : "s"}`);
+    showToast("PORT SCAN COMPLETE // BONUS NODES FOUND");
+  }
+
+  if (now >= nextBlackIceAt) {
+    nextBlackIceAt = now + BLACK_ICE_INTERVAL_MS;
+    const bypassLevel = getUpgradeLevel(state, "blackIceBypass");
+    const bypassChance = Math.min(1, bypassLevel * 0.2);
+    if (bypassLevel > 0 && Math.random() < bypassChance) {
+      blackIceUntil = 0;
+      appendTerminal("output", "black ice signature detected :: bypass accepted");
+      addEvent(`black ice bypassed :: ${Math.round(bypassChance * 100)}% shield roll`);
+    } else {
+      blackIceUntil = now + BLACK_ICE_DURATION_MS;
+      appendTerminal("error", "BLACK ICE // manual channel slowed for 6s");
+      addEvent("black ice detected :: manual channel temporarily locked");
+      showToast("BLACK ICE // CHANNEL LOCKED FOR 6S");
+    }
+  }
+}
+
 function gameLoop(now) {
   const elapsedSeconds = Math.min(0.1, Math.max(0, (now - lastFrame) / 1000));
   lastFrame = now;
+  processTimedSystems(now);
 
   const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
-  if (activeInput) {
-    state.manualProgress += elapsedSeconds * getManualRate(state);
+  const blackIceActive = isBlackIceActive(now);
+  if (activeInput && !blackIceActive) {
+    state.manualProgress += elapsedSeconds * getManualRate(state, { combo: comboCount });
     while (state.manualProgress >= 1) {
       state.manualProgress -= 1;
       earnHacks(1);
     }
-  } else if (lastInputAt > 0 && now - lastInputAt > MANUAL_DECAY_DELAY && state.manualProgress > 0) {
+  } else if (!blackIceActive && lastInputAt > 0 && now - lastInputAt > MANUAL_DECAY_DELAY && state.manualProgress > 0) {
     state.manualProgress = Math.max(0, state.manualProgress - elapsedSeconds * MANUAL_DECAY_RATE);
   }
 
-  const autoRate = getAutoRate(state);
+  const processForkActive = isProcessForkActive(now);
+  const portScannerActive = isPortScannerActive(now);
+  const autoRate = getAutohackerRate(state, { processForkActive })
+    + getPortScannerBonusRate(state, { portScannerActive });
   if (autoRate > 0) {
     state.autoProgress += elapsedSeconds * autoRate;
     while (state.autoProgress >= 1) {
@@ -363,15 +615,33 @@ function gameLoop(now) {
     }
   }
 
+  const relayRate = getRelayRate(state);
+  if (relayRate > 0) {
+    state.relayProgress += elapsedSeconds * relayRate;
+    while (state.relayProgress >= 1) {
+      state.relayProgress -= 1;
+      earnHacks(1, `relay LV ${state.botnetRelayLevel}`);
+    }
+  }
+
+  if (Date.now() - lastAutosaveAt >= AUTOSAVE_INTERVAL_MS) saveState();
   updateView(now);
   window.requestAnimationFrame(gameLoop);
 }
 
 function handleUpgrade(upgradeId) {
   const result = buyUpgrade(state, upgradeId);
+  const config = UPGRADE_CONFIG[upgradeId];
   if (!result.ok) {
-    const needed = Number.isFinite(result.cost) ? result.cost - state.hacks : 0;
-    showToast(needed > 0 ? `INSUFFICIENT HACKS // NEED ${needed} MORE` : "UPGRADE AT MAXIMUM LEVEL");
+    if (result.reason === "locked") {
+      const remaining = Math.max(0, result.unlockAt - state.totalHacks);
+      showToast(`LOCKED // NEED ${remaining} MORE LIFETIME HACKS`);
+    } else if (result.reason === "insufficient") {
+      const needed = Number.isFinite(result.cost) ? result.cost - state.hacks : 0;
+      showToast(`INSUFFICIENT HACKS // NEED ${needed} MORE`);
+    } else {
+      showToast("UPGRADE AT MAXIMUM LEVEL");
+    }
     return;
   }
 
@@ -380,10 +650,14 @@ function handleUpgrade(upgradeId) {
     addEvent("node 02 online :: autonomous loop attached");
     appendTerminal("output", "autohacker online :: second node now charging");
     showToast("NODE 02 ONLINE // AUTONOMOUS LOOP ATTACHED");
+  } else if (upgradeId === "botnetRelay" && result.level === 1) {
+    addEvent("node 03 online :: relay branch attached");
+    appendTerminal("output", "botnet relay online :: third node now charging");
+    showToast("NODE 03 ONLINE // RELAY BRANCH ATTACHED");
   } else {
-    addEvent(`${upgradeId} upgraded to level ${result.level}`);
-    appendTerminal("output", `${upgradeId} level ${result.level} installed :: throughput recalibrated`);
-    showToast(`${upgradeId.toUpperCase()} UPGRADED // LV ${result.level}`);
+    addEvent(`${config.label.toLowerCase()} upgraded to level ${result.level}`);
+    appendTerminal("output", `${config.label.toLowerCase()} level ${result.level} installed :: throughput recalibrated`);
+    showToast(`${config.label} UPGRADED // LV ${result.level}`);
   }
 
   updateView(performance.now());
@@ -392,10 +666,6 @@ function handleUpgrade(upgradeId) {
 
 document.addEventListener("keydown", handleGlobalKey, true);
 document.addEventListener("paste", handlePaste, true);
-
-for (const [upgradeId, upgradeView] of Object.entries(upgradeElements)) {
-  upgradeView.button.addEventListener("click", () => handleUpgrade(upgradeId));
-}
 
 elements.resetButton.addEventListener("click", () => {
   if (window.confirm("Reset this local hacking session?")) resetState();
@@ -406,6 +676,8 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") saveState();
 });
 
+renderUpgradeCards();
+state = loadState();
 updateNoteBuffer();
 updateView(performance.now());
 window.requestAnimationFrame(gameLoop);
