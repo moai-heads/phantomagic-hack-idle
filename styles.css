@@ -574,6 +574,16 @@ h2 {
   white-space: nowrap;
 }
 
+.node-core.disrupted {
+  border-color: var(--amber);
+  box-shadow: 0 0 22px rgba(199, 230, 124, 0.18), inset 0 0 26px rgba(199, 230, 124, 0.05);
+}
+
+.node-core.disrupted .core-fill::before {
+  background: var(--amber);
+  box-shadow: 0 0 12px 2px var(--amber);
+}
+
 .auto-node.locked .node-core,
 .relay-node.locked .node-core {
   border-color: rgba(110, 164, 122, 0.3);
@@ -670,6 +680,10 @@ h2 {
 
 .terminal-line.output {
   color: var(--green-dim);
+}
+
+.terminal-line.error {
+  color: var(--amber);
 }
 
 .terminal-line.dim {
@@ -791,6 +805,10 @@ h2 {
   opacity: 0.6;
 }
 
+.upgrade-card.locked-card {
+  border-style: dashed;
+}
+
 .upgrade-card:disabled,
 .upgrade-card.future-card {
   border-color: rgba(91, 139, 97, 0.16);
@@ -844,6 +862,20 @@ h2 {
   gap: 5px;
   color: var(--green-bright);
   font-size: 11px;
+}
+
+.upgrade-unlock {
+  overflow: hidden;
+  color: var(--green-muted);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.upgrade-card.can-buy .upgrade-unlock {
+  color: var(--green-bright);
 }
 
 .cost-icon {
