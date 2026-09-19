@@ -327,25 +327,47 @@ export function buyUpgrade(state, upgradeId) {
   return { ok: true, state: nextState, cost, level: currentLevel + 1 };
 }
 
-export function applyOfflineProgress(state, elapsedSeconds) {
-  const safeElapsed = Math.min(getOfflineCapSeconds(state), Math.max(0, Number(elapsedSeconds) || 0));
-  const offlineMultiplier = getOfflineMultiplier(state);
-  const autoProgress = state.autoProgress + safeElapsed * getAutohackerRate(state) * offlineMultiplier;
-  const relayProgress = state.relayProgress + safeElapsed * getRelayRate(state) * offlineMultiplier;
+export function advancePassiveProgress(
+  state,
+  elapsedSeconds,
+  { offline = false, processForkActive = false, portScannerActive = false } = {},
+) {
+  const safeElapsed = Math.max(0, Number(elapsedSeconds) || 0);
+  const outputMultiplier = offline ? getOfflineMultiplier(state) : 1;
+  const autoRate = getAutohackerRate(state, { processForkActive })
+    + getPortScannerBonusRate(state, { portScannerActive });
+  const relayRate = getRelayRate(state);
+  const autoProgress = state.autoProgress + safeElapsed * autoRate * outputMultiplier;
+  const relayProgress = state.relayProgress + safeElapsed * relayRate * outputMultiplier;
   const autoEarned = Math.floor(autoProgress);
   const relayEarned = Math.floor(relayProgress);
   const earned = autoEarned + relayEarned;
 
   return {
-    ...state,
-    hacks: state.hacks + earned,
-    totalHacks: state.totalHacks + earned,
-    autoProgress: autoProgress - autoEarned,
-    relayProgress: relayProgress - relayEarned,
+    state: {
+      ...state,
+      hacks: state.hacks + earned,
+      totalHacks: state.totalHacks + earned,
+      autoProgress: autoProgress - autoEarned,
+      relayProgress: relayProgress - relayEarned,
+    },
+    elapsedSeconds: safeElapsed,
+    autoEarned,
+    relayEarned,
+    earned,
+  };
+}
+
+export function applyOfflineProgress(state, elapsedSeconds) {
+  const safeElapsed = Math.min(getOfflineCapSeconds(state), Math.max(0, Number(elapsedSeconds) || 0));
+  const progressed = advancePassiveProgress(state, safeElapsed, { offline: true });
+
+  return {
+    ...progressed.state,
     offlineSeconds: safeElapsed,
-    offlineAutoGain: autoEarned,
-    offlineRelayGain: relayEarned,
-    offlineGain: earned,
+    offlineAutoGain: progressed.autoEarned,
+    offlineRelayGain: progressed.relayEarned,
+    offlineGain: progressed.earned,
   };
 }
 
