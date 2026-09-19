@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   BASE_OFFLINE_SECONDS,
   UPGRADE_CONFIG,
+  UPGRADE_ORDER,
+  advancePassiveProgress,
   UPGRADE_IDS,
   applyOfflineProgress,
   areUpgradePrerequisitesMet,
@@ -55,6 +57,31 @@ test("autohacker output is passive and amplifier boosts it", () => {
   assert.equal(progressed.hacks, 2);
   assert.equal(progressed.totalHacks, 2);
   assert.ok(Math.abs(progressed.autoProgress - 0.24) < 1e-12);
+});
+
+test("passive advancement keeps fractional charge and applies offline bonuses", () => {
+  const state = {
+    ...createDefaultState(),
+    autohackerLevel: 1,
+    ghostProxyLevel: 2,
+    autoProgress: 0.9,
+  };
+
+  const active = advancePassiveProgress(state, 2);
+  assert.equal(active.autoEarned, 1);
+  assert.equal(active.state.hacks, 1);
+  assert.ok(Math.abs(active.state.autoProgress - 0.1) < 1e-12);
+
+  const offline = advancePassiveProgress(state, 2, { offline: true });
+  assert.equal(offline.autoEarned, 1);
+  assert.equal(offline.state.hacks, 1);
+  assert.ok(Math.abs(offline.state.autoProgress - 0.2) < 1e-12);
+});
+
+test("upgrade order keeps autohacker as the first root", () => {
+  assert.equal(UPGRADE_ORDER[0], "autohacker");
+  assert.equal(UPGRADE_ORDER[1], "amplifier");
+  assert.equal(new Set(UPGRADE_ORDER).size, UPGRADE_IDS.length);
 });
 
 test("offline progress is capped and preserves partial charge", () => {

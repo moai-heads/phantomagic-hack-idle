@@ -1,7 +1,6 @@
 import {
   SAVE_KEY,
   UPGRADE_CONFIG,
-  UPGRADE_IDS,
   advancePassiveProgress,
   applyOfflineProgress,
   buyUpgrade,
