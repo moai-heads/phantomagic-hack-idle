@@ -23,7 +23,7 @@ import {
   getZeroDayReward,
   isUpgradeUnlocked,
   normalizeState,
-} from "./game.js?v=powerups-20260916";
+} from "./game.js?v=runtime-20260919";
 
 const STREAM_TEMPLATES = Object.freeze([
   "ssh ghost@10.13.37.4 -p 443",
