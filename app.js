@@ -96,6 +96,7 @@ const initialNow = performance.now();
 let state;
 let lastAutosaveAt = Date.now();
 let lastSimulationAt = Date.now();
+let hiddenSimulatedSeconds = 0;
 let lastInputAt = 0;
 let lastTypedKey = "";
 let comboCount = 0;
@@ -623,10 +624,15 @@ function runSimulationTick() {
     state.manualProgress = Math.max(0, state.manualProgress - elapsedSeconds * MANUAL_DECAY_RATE);
   }
 
-  const progressed = advancePassiveProgress(state, elapsedSeconds, {
+  const isHidden = document.visibilityState === "hidden";
+  const offlineBudget = Math.max(0, getOfflineCapSeconds(state) - hiddenSimulatedSeconds);
+  const simulatedSeconds = isHidden ? Math.min(elapsedSeconds, offlineBudget) : elapsedSeconds;
+  const progressed = advancePassiveProgress(state, simulatedSeconds, {
+    offline: isHidden,
     processForkActive: isProcessForkActive(performanceNow),
     portScannerActive: isPortScannerActive(performanceNow),
   });
+  if (isHidden) hiddenSimulatedSeconds += simulatedSeconds;
   state = progressed.state;
   reportPassiveGain(progressed.autoEarned, `autohacker LV ${state.autohackerLevel}`);
   reportPassiveGain(progressed.relayEarned, `relay LV ${state.botnetRelayLevel}`);
@@ -639,9 +645,16 @@ function catchUpFromBackground() {
   const now = Date.now();
   const elapsedSeconds = Math.max(0, (now - lastSimulationAt) / 1000);
   lastSimulationAt = now;
-  if (elapsedSeconds <= 0) return;
+  const offlineBudget = Math.max(0, getOfflineCapSeconds(state) - hiddenSimulatedSeconds);
+  const catchUpSeconds = Math.min(elapsedSeconds, offlineBudget);
+  hiddenSimulatedSeconds = 0;
+  if (catchUpSeconds <= 0) {
+    saveState();
+    updateView(performance.now());
+    return;
+  }
 
-  const progressed = applyOfflineProgress(state, elapsedSeconds);
+  const progressed = applyOfflineProgress(state, catchUpSeconds);
   state = progressed;
   reportPassiveGain(progressed.offlineAutoGain, `offline autohacker LV ${state.autohackerLevel}`);
   reportPassiveGain(progressed.offlineRelayGain, `offline relay LV ${state.botnetRelayLevel}`);
@@ -705,6 +718,7 @@ elements.resetButton.addEventListener("click", () => {
 window.addEventListener("beforeunload", saveState);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
+    hiddenSimulatedSeconds = 0;
     saveState();
   } else {
     catchUpFromBackground();
