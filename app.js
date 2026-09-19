@@ -2,6 +2,7 @@ import {
   SAVE_KEY,
   UPGRADE_CONFIG,
   UPGRADE_IDS,
+  advancePassiveProgress,
   applyOfflineProgress,
   buyUpgrade,
   createDefaultState,
@@ -52,6 +53,7 @@ const PORT_SCAN_INTERVAL_MS = 48_000;
 const BLACK_ICE_INTERVAL_MS = 45_000;
 const BLACK_ICE_DURATION_MS = 6_000;
 const AUTOSAVE_INTERVAL_MS = 10_000;
+const SIMULATION_INTERVAL_MS = 100;
 
 const elements = {
   appShell: document.querySelector("#appShell"),
@@ -92,8 +94,8 @@ const elements = {
 const upgradeElements = new Map();
 const initialNow = performance.now();
 let state;
-let lastFrame = initialNow;
 let lastAutosaveAt = Date.now();
+let lastSimulationAt = Date.now();
 let lastInputAt = 0;
 let lastTypedKey = "";
 let comboCount = 0;
@@ -115,7 +117,10 @@ function loadState() {
     if (!raw) return createDefaultState(now);
     const restored = normalizeState(JSON.parse(raw), now);
     const elapsedSeconds = Math.max(0, (now - restored.lastSavedAt) / 1000);
-    const withOfflineProgress = applyOfflineProgress(restored, elapsedSeconds);
+    const withOfflineProgress = {
+      ...applyOfflineProgress(restored, elapsedSeconds),
+      lastSavedAt: now,
+    };
 
     if (withOfflineProgress.offlineGain > 0) {
       window.setTimeout(() => {
@@ -270,6 +275,14 @@ function updateCombo(key, now) {
   }
 
   lastTypedKey = normalizedKey;
+}
+
+function reportPassiveGain(amount, reason) {
+  const minted = Math.floor(Number(amount) || 0);
+  if (minted <= 0) return;
+  const suffix = minted === 1 ? "" : "s";
+  appendTerminal("output", `${reason} :: +${minted} hack${suffix} minted`);
+  addEvent(`${reason} minted +${minted} hack${suffix}`);
 }
 
 function earnHacks(amount, reason = "manual node", applyOutputMultiplier = false) {
@@ -589,47 +602,59 @@ function processTimedSystems(now) {
   }
 }
 
-function gameLoop(now) {
-  const elapsedSeconds = Math.min(0.1, Math.max(0, (now - lastFrame) / 1000));
-  lastFrame = now;
-  processTimedSystems(now);
+function runSimulationTick() {
+  const now = Date.now();
+  const elapsedSeconds = Math.max(0, (now - lastSimulationAt) / 1000);
+  lastSimulationAt = now;
+  const performanceNow = performance.now();
 
-  const activeInput = lastInputAt > 0 && now - lastInputAt <= ACTIVE_INPUT_WINDOW;
-  const blackIceActive = isBlackIceActive(now);
+  processTimedSystems(performanceNow);
+
+  const activeInput = lastInputAt > 0 && performanceNow - lastInputAt <= ACTIVE_INPUT_WINDOW;
+  const blackIceActive = isBlackIceActive(performanceNow);
   if (activeInput && !blackIceActive) {
     state.manualProgress += elapsedSeconds * getManualRate(state, { combo: comboCount });
-    while (state.manualProgress >= 1) {
-      state.manualProgress -= 1;
-      earnHacks(1);
+    const manualEarned = Math.floor(state.manualProgress);
+    if (manualEarned > 0) {
+      state.manualProgress -= manualEarned;
+      earnHacks(manualEarned);
     }
-  } else if (!blackIceActive && lastInputAt > 0 && now - lastInputAt > MANUAL_DECAY_DELAY && state.manualProgress > 0) {
+  } else if (!blackIceActive && lastInputAt > 0 && performanceNow - lastInputAt > MANUAL_DECAY_DELAY && state.manualProgress > 0) {
     state.manualProgress = Math.max(0, state.manualProgress - elapsedSeconds * MANUAL_DECAY_RATE);
   }
 
-  const processForkActive = isProcessForkActive(now);
-  const portScannerActive = isPortScannerActive(now);
-  const autoRate = getAutohackerRate(state, { processForkActive })
-    + getPortScannerBonusRate(state, { portScannerActive });
-  if (autoRate > 0) {
-    state.autoProgress += elapsedSeconds * autoRate;
-    while (state.autoProgress >= 1) {
-      state.autoProgress -= 1;
-      earnHacks(1, `autohacker LV ${state.autohackerLevel}`);
-    }
-  }
-
-  const relayRate = getRelayRate(state);
-  if (relayRate > 0) {
-    state.relayProgress += elapsedSeconds * relayRate;
-    while (state.relayProgress >= 1) {
-      state.relayProgress -= 1;
-      earnHacks(1, `relay LV ${state.botnetRelayLevel}`);
-    }
-  }
+  const progressed = advancePassiveProgress(state, elapsedSeconds, {
+    processForkActive: isProcessForkActive(performanceNow),
+    portScannerActive: isPortScannerActive(performanceNow),
+  });
+  state = progressed.state;
+  reportPassiveGain(progressed.autoEarned, `autohacker LV ${state.autohackerLevel}`);
+  reportPassiveGain(progressed.relayEarned, `relay LV ${state.botnetRelayLevel}`);
 
   if (Date.now() - lastAutosaveAt >= AUTOSAVE_INTERVAL_MS) saveState();
+  updateView(performanceNow);
+}
+
+function catchUpFromBackground() {
+  const now = Date.now();
+  const elapsedSeconds = Math.max(0, (now - lastSimulationAt) / 1000);
+  lastSimulationAt = now;
+  if (elapsedSeconds <= 0) return;
+
+  const progressed = applyOfflineProgress(state, elapsedSeconds);
+  state = progressed;
+  reportPassiveGain(progressed.offlineAutoGain, `offline autohacker LV ${state.autohackerLevel}`);
+  reportPassiveGain(progressed.offlineRelayGain, `offline relay LV ${state.botnetRelayLevel}`);
+  if (progressed.offlineGain > 0) {
+    showToast(`OFFLINE BUFFER FLUSHED // +${progressed.offlineGain} HACKS`);
+  }
+  saveState();
+  updateView(performance.now());
+}
+
+function renderLoop(now) {
   updateView(now);
-  window.requestAnimationFrame(gameLoop);
+  window.requestAnimationFrame(renderLoop);
 }
 
 function handleUpgrade(upgradeId) {
@@ -679,12 +704,18 @@ elements.resetButton.addEventListener("click", () => {
 
 window.addEventListener("beforeunload", saveState);
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") saveState();
+  if (document.visibilityState === "hidden") {
+    saveState();
+  } else {
+    catchUpFromBackground();
+  }
 });
 
 state = loadState();
+lastSimulationAt = Date.now();
 renderUpgradeCards();
 updateNoteBuffer();
 updateView(performance.now());
-window.requestAnimationFrame(gameLoop);
+window.setInterval(runSimulationTick, SIMULATION_INTERVAL_MS);
+window.requestAnimationFrame(renderLoop);
 window.setTimeout(() => elements.appShell?.focus({ preventScroll: true }), 0);
