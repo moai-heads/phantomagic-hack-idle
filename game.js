@@ -131,7 +131,7 @@ export const UPGRADE_CONFIG = Object.freeze({
     stateKey: "logScrubberLevel",
     label: "LOG SCRUBBER",
     description: "compresses terminal noise to free autonomous cycles",
-    baseEffect: "+5% autonomous output / level; trims the buffer",
+    baseEffect: "+5% autonomous output / level; trims log lines",
     baseCost: 280,
     costMultiplier: 1.95,
     maxLevel: 8,
@@ -164,6 +164,23 @@ export const UPGRADE_CONFIG = Object.freeze({
     prerequisites: Object.freeze([{ upgradeId: "botnetRelay", level: 1 }]),
   }),
 });
+
+export const UPGRADE_ORDER = Object.freeze([
+  "autohacker",
+  "amplifier",
+  "packetMirror",
+  "ghostProxy",
+  "syntaxBurst",
+  "keySequence",
+  "processFork",
+  "terminalCache",
+  "zeroDay",
+  "portScanner",
+  "rootAccess",
+  "logScrubber",
+  "botnetRelay",
+  "blackIceBypass",
+]);
 
 export const UPGRADE_IDS = Object.freeze(Object.keys(UPGRADE_CONFIG));
 
@@ -210,7 +227,7 @@ export function areUpgradePrerequisitesMet(state, upgradeId) {
 }
 
 export function getVisibleUpgradeIds(state) {
-  return UPGRADE_IDS.filter((upgradeId) => areUpgradePrerequisitesMet(state, upgradeId));
+  return UPGRADE_ORDER.filter((upgradeId) => areUpgradePrerequisitesMet(state, upgradeId));
 }
 
 export function isUpgradeUnlocked(state, upgradeId) {

@@ -126,7 +126,7 @@ test("milestone, exploit, and scrubber rules expose predictable values", () => {
 
 test("upgrade tree reveals keyboard and automation branches from their parent nodes", () => {
   const base = createDefaultState();
-  assert.deepEqual(getVisibleUpgradeIds(base), ["amplifier", "autohacker"]);
+  assert.deepEqual(getVisibleUpgradeIds(base), ["autohacker", "amplifier"]);
 
   const keyboard = { ...base, amplifierLevel: 1 };
   assert.equal(areUpgradePrerequisitesMet(keyboard, "syntaxBurst"), true);
@@ -137,8 +137,8 @@ test("upgrade tree reveals keyboard and automation branches from their parent no
   assert.equal(areUpgradePrerequisitesMet(automation, "packetMirror"), true);
   assert.equal(areUpgradePrerequisitesMet(automation, "processFork"), false);
   assert.deepEqual(getVisibleUpgradeIds(automation), [
-    "amplifier",
     "autohacker",
+    "amplifier",
     "packetMirror",
     "ghostProxy",
   ]);

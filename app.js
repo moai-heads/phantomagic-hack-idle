@@ -394,7 +394,7 @@ function renderUpgradeCards() {
   elements.upgradeList.replaceChildren();
   const hint = document.createElement("div");
   hint.className = "upgrade-list-hint";
-  hint.textContent = "BUY TIERS WITH BANKED HACKS // NEW SYSTEMS REVEAL WHEN THEIR PARENT NODES ARE ONLINE";
+  hint.textContent = "ROOTS: AUTOHACKER + KEYBOARD AMPLIFIER // CHILD SYSTEMS REVEAL WHEN PREREQUISITES ARE ONLINE";
   elements.upgradeList.append(hint);
   upgradeElements.clear();
   for (const upgradeId of getVisibleUpgradeIds(state)) createUpgradeElement(upgradeId);
@@ -427,7 +427,7 @@ function getUpgradeEffectText(upgradeId, level) {
     case "rootAccess":
       return `+${(getGlobalOutputMultiplier(state) - 1) * 100}% all output`;
     case "logScrubber":
-      return `+${((getLogScrubberMultiplier(state) - 1) * 100).toFixed(0)}% auto output // ${getTerminalLineLimit(state)} lines`;
+      return `+${((getLogScrubberMultiplier(state) - 1) * 100).toFixed(0)}% autonomous output // ${getTerminalLineLimit(state)} log lines`;
     case "botnetRelay":
       return `+${getRelayRate(state).toFixed(2)} relay HPS`;
     case "blackIceBypass":
